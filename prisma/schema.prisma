@@ -57,19 +57,23 @@ model Project {
 }
 
 model TestCase {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title       String
   description String?
   parentId    String?
-  order       Int      @default(0)
-  status      String   @default("pending")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  order       Int       @default(0)
+  status      String    @default("pending")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   checkedAt   DateTime?
   createdById String
   updatedById String?
   checkedById String?
+  steps       TestCaseStep[]
+  comments    Comment[]
+  checks      TestCaseCheck[]
 }
 
 model TestCaseStep {
