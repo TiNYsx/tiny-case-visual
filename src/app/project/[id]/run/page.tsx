@@ -69,7 +69,7 @@ export default function RunTestPage() {
   const startTestCase = (tc: TestCase) => {
     setSelectedTestCase(tc);
     setCurrentStepIndex(0);
-    setStepResults(tc.steps.map(s => ({ stepId: s.id, status: 'pending', notes: '' })));
+    setStepResults((tc.steps || []).map(s => ({ stepId: s.id, status: 'pending', notes: '' })));
     setTestRunStatus('pending');
     setNotes('');
   };
@@ -187,7 +187,7 @@ export default function RunTestPage() {
                   <div key={result.stepId} className="flex items-center gap-3 p-2 rounded-lg bg-bg-primary/50">
                     <span className="w-6 h-6 rounded-full bg-accent/20 text-accent text-sm flex items-center justify-center">{i + 1}</span>
                     <span className="flex-1 text-text-secondary text-sm">
-                      {selectedTestCase.steps.find(s => s.id === result.stepId)?.text.substring(0, 50)}...
+                      {selectedTestCase.steps?.find(s => s.id === result.stepId)?.text.substring(0, 50)}...
                     </span>
                     {result.status === 'pass' ? (
                       <CheckCircle className="w-4 h-4 text-green-500" />
@@ -365,7 +365,7 @@ export default function RunTestPage() {
             <div className="w-80 border-l border-border p-4 overflow-auto">
               <h3 className="font-semibold mb-4">Steps Overview</h3>
               <div className="space-y-2">
-                {selectedTestCase.steps.map((step, i) => (
+                {selectedTestCase.steps?.map((step, i) => (
                   <button
                     key={step.id}
                     onClick={() => setCurrentStepIndex(i)}
