@@ -369,7 +369,7 @@ export default function ProjectPage() {
 
                 {activeTab === 'steps' && (
                   <div className="space-y-4">
-                    {selectedTestCase.steps.length === 0 ? (
+                    {!selectedTestCase.steps || selectedTestCase.steps.length === 0 ? (
                       <p className="text-text-muted text-center py-4">{t('testCase.addStep')}</p>
                     ) : (
                       selectedTestCase.steps.map((step, i) => (
