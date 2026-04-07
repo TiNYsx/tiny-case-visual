@@ -2,9 +2,9 @@
 
 import { signIn, useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-// Use a custom Google SVG instead
+
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="w-6 h-6">
     <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -18,12 +18,70 @@ export default function LoginPage() {
   const { t } = useTranslation();
   const { data: session, status } = useSession();
   const router = useRouter();
+  const [isRegister, setIsRegister] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (session) {
       router.push('/');
     }
   }, [session, router]);
+
+  const handleCredentialsLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    const result = await signIn('credentials', {
+      email,
+      password,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setError('Invalid email or password');
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Registration failed');
+        setLoading(false);
+        return;
+      }
+
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError('Login failed after registration');
+      }
+    } catch {
+      setError('Something went wrong');
+    }
+    setLoading(false);
+  };
 
   if (status === 'loading') {
     return (
@@ -46,8 +104,90 @@ export default function LoginPage() {
         </div>
 
         <div className="glass p-8 rounded-3xl">
-          <h2 className="text-2xl font-semibold mb-2">{t('auth.welcome')}</h2>
-          <p className="text-text-muted mb-8">{t('auth.welcomeDesc')}</p>
+          <h2 className="text-2xl font-semibold mb-2">
+            {isRegister ? t('project.create') : t('auth.welcome')}
+          </h2>
+          <p className="text-text-muted mb-8">
+            {isRegister ? t('auth.welcomeDesc') : t('auth.welcomeDesc')}
+          </p>
+
+          {error && (
+            <div className="mb-4 p-3 bg-red-500/20 border border-red-500 rounded-lg text-red-400 text-sm">
+              {error}
+            </div>
+          )}
+
+          {isRegister ? (
+            <form onSubmit={handleRegister} className="space-y-4">
+              <input
+                type="text"
+                placeholder={t('project.name')}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-bg-primary border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+                required
+              />
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-bg-primary border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+                required
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-bg-primary border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+                required
+                minLength={6}
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="glass-button w-full py-4 px-6 rounded-xl text-lg font-medium disabled:opacity-50"
+              >
+                {loading ? t('common.loading') : t('project.create')}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleCredentialsLogin} className="space-y-4">
+              <input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-bg-primary border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+                required
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-bg-primary border border-border text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent"
+                required
+              />
+              <button
+                type="submit"
+                disabled={loading}
+                className="glass-button w-full py-4 px-6 rounded-xl text-lg font-medium disabled:opacity-50"
+              >
+                {loading ? t('common.loading') : t('auth.login')}
+              </button>
+            </form>
+          )}
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-4 bg-glass text-text-muted">or</span>
+            </div>
+          </div>
 
           <button
             onClick={() => signIn('google', { callbackUrl: '/' })}
@@ -56,6 +196,20 @@ export default function LoginPage() {
             <GoogleIcon />
             {t('auth.loginWithGoogle')}
           </button>
+
+          <p className="mt-6 text-text-muted text-sm">
+            {isRegister ? 'Already have an account?' : "Don't have an account?"}{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegister(!isRegister);
+                setError('');
+              }}
+              className="text-accent hover:underline"
+            >
+              {isRegister ? t('auth.login') : 'Register'}
+            </button>
+          </p>
         </div>
       </div>
 
