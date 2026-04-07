@@ -121,7 +121,7 @@ export default function ProjectPage() {
           position: { x: x + level * 300, y: y + i * 120 + yOffset },
           data: node,
         });
-        if (node.children.length > 0) {
+        if (node.children && node.children.length > 0) {
           traverse(node.children, x, y + i * 120 + yOffset, level + 1);
         }
       });
