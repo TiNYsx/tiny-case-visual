@@ -16,6 +16,8 @@ import { Modal } from '@/components/ui/Modal';
 const ReactFlow = dynamic(() => import('reactflow').then(m => ({ default: m.ReactFlow })), { ssr: false });
 const CustomNode = dynamic(() => import('@/components/testcase/CustomNode').then(m => ({ default: m.CustomNode })), { ssr: false });
 
+const nodeTypes = { custom: CustomNode };
+
 interface TestCase {
   id: string;
   title: string;

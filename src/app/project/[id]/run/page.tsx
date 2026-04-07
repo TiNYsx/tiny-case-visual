@@ -93,7 +93,7 @@ export default function RunTestPage() {
   };
 
   const nextStep = () => {
-    if (selectedTestCase && currentStepIndex < selectedTestCase.steps.length - 1) {
+    if (selectedTestCase && currentStepIndex < selectedTestCase?.steps?.length - 1) {
       setCurrentStepIndex(currentStepIndex + 1);
     }
   };
@@ -238,7 +238,7 @@ export default function RunTestPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="font-semibold">{tc.title}</h3>
-                      <p className="text-sm text-text-muted mt-1">{tc.steps.length} steps</p>
+                      <p className="text-sm text-text-muted mt-1">{tc.steps?.length || 0} steps</p>
                     </div>
                     <Button onClick={() => startTestCase(tc)}>
                       Start Test
@@ -258,7 +258,7 @@ export default function RunTestPage() {
                     Back
                   </Button>
                   <div className="text-text-muted text-sm">
-                    Step {currentStepIndex + 1} of {selectedTestCase.steps.length}
+                    Step {currentStepIndex + 1} of {selectedTestCase?.steps?.length}
                   </div>
                 </div>
 
@@ -271,7 +271,7 @@ export default function RunTestPage() {
                   )}
                 </div>
 
-                {selectedTestCase.steps.length > 0 && (
+                {selectedTestCase?.steps?.length > 0 && (
                   <div className="glass rounded-xl p-6">
                     <div className="flex items-center gap-2 mb-4">
                       <span className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center font-semibold">
@@ -333,7 +333,7 @@ export default function RunTestPage() {
                     Previous
                   </Button>
                   
-                  {currentStepIndex === selectedTestCase.steps.length - 1 ? (
+                  {currentStepIndex === selectedTestCase?.steps?.length - 1 ? (
                     <div className="flex gap-2">
                       <Button 
                         variant="danger" 
