@@ -18,6 +18,8 @@ model User {
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
   sessions      Session[]
+  comments      Comment[]
+  testCases     TestCaseCheck[]
 }
 
 model Account {
@@ -92,6 +94,7 @@ model Comment {
   testCaseId String
   testCase   TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
   userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   text       String
   type       String    @default("comment")
   createdAt  DateTime  @default(now())
@@ -114,6 +117,7 @@ model TestCaseCheck {
   testCaseId   String
   testCase     TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
   userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   status       String
   notes        String?   @db.Text
   stepResults  Json?

@@ -327,7 +327,7 @@ export default function ProjectPage() {
             onNodeClick={handleNodeClick}
             fitView
             attributionPosition="bottom-left"
-            nodeTypes={{ custom: CustomNode }}
+            nodeTypes={nodeTypes}
           >
           </ReactFlow>
         </div>
