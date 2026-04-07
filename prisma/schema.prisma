@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  displayName   String
+  photoURL      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+}
+
+model TestCase {
+  id          String   @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  parentId    String?
+  order       Int      @default(0)
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  checkedAt   DateTime?
+  createdById String
+  updatedById String?
+  checkedById String?
+}
+
+model TestCaseStep {
+  id         String   @id @default(cuid())
+  testCaseId String
+  text       String
+  imageUrl   String?
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Comment {
+  id         String   @id @default(cuid())
+  testCaseId String
+  userId     String
+  text       String
+  type       String   @default("comment")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Attachment {
+  id         String   @id @default(cuid())
+  commentId  String
+  name       String
+  url        String
+  type       String
+  createdAt  DateTime @default(now())
+}
+
+model TestCaseCheck {
+  id           String   @id @default(cuid())
+  testCaseId   String
+  userId       String
+  status       String
+  checkedAt    DateTime @default(now())
+}
