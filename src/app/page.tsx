@@ -16,8 +16,8 @@ interface Project {
   description: string | null;
   createdAt: string;
   updatedAt: string;
-  createdBy: { id: string; displayName: string; photoURL: string | null };
-  _count: { testCases: number };
+  createdById: string;
+  _count?: { testCases: number };
 }
 
 export default function DashboardPage() {
@@ -203,7 +203,7 @@ export default function DashboardPage() {
                   {project.description || '-'}
                 </p>
                 <div className="flex items-center justify-between text-sm text-text-muted">
-                  <span>{project._count.testCases} {t('project.testCases')}</span>
+                  <span>{project._count?.testCases || 0} {t('project.testCases')}</span>
                   <span>{new Date(project.updatedAt).toLocaleDateString('th-TH')}</span>
                 </div>
               </motion.div>
