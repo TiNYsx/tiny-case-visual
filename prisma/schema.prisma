@@ -77,28 +77,32 @@ model TestCase {
 }
 
 model TestCaseStep {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   testCaseId String
+  testCase   TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
   text       String
   imageUrl   String?
-  order      Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  order      Int       @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 }
 
 model Comment {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   testCaseId String
+  testCase   TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
   userId     String
   text       String
-  type       String   @default("comment")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  type       String    @default("comment")
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  attachments Attachment[]
 }
 
 model Attachment {
   id         String   @id @default(cuid())
   commentId  String
+  comment    Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
   name       String
   url        String
   type       String
@@ -106,11 +110,12 @@ model Attachment {
 }
 
 model TestCaseCheck {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   testCaseId   String
+  testCase     TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
   userId       String
   status       String
-  notes        String?  @db.Text
+  notes        String?   @db.Text
   stepResults  Json?
-  checkedAt    DateTime @default(now())
+  checkedAt    DateTime  @default(now())
 }
