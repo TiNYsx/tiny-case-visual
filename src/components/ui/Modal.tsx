@@ -38,7 +38,7 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md' }:
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -50,7 +50,7 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md' }:
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className={`relative w-full ${sizes[size]} mx-4 glass rounded-2xl p-6`}
+            className={`relative z-[101] w-full ${sizes[size]} mx-4 glass rounded-2xl p-6`}
           >
             {title && (
               <div className="flex items-center justify-between mb-4">

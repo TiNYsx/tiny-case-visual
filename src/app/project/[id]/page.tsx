@@ -218,7 +218,7 @@ export default function ProjectPage() {
   const openEditModal = (tc: TestCase) => {
     setEditingTestCase(tc);
     setFormData({ title: tc.title, description: tc.description || '', parentId: tc.parentId });
-    setSteps(tc.steps.map(s => ({ text: s.text, imageUrl: s.imageUrl || '' })));
+    setSteps(tc.steps ? tc.steps.map(s => ({ text: s.text, imageUrl: s.imageUrl || '' })) : []);
     setIsModalOpen(true);
   };
 
