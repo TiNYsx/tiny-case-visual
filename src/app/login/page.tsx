@@ -45,6 +45,8 @@ export default function LoginPage() {
     if (result?.error) {
       setError('Invalid email or password');
       setLoading(false);
+    } else {
+      router.push('/');
     }
   };
 
@@ -76,6 +78,8 @@ export default function LoginPage() {
 
       if (result?.error) {
         setError('Login failed after registration');
+      } else {
+        router.push('/');
       }
     } catch {
       setError('Something went wrong');
