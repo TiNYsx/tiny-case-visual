@@ -17,20 +17,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Test Case ID is required' }, { status: 400 });
     }
 
-    const comments = await prisma.comment.findMany({
+    const testRuns = await prisma.testCaseCheck.findMany({
       where: { testCaseId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { checkedAt: 'desc' },
       include: {
-        attachments: true,
         user: {
           select: { id: true, name: true, image: true },
         },
       },
     });
 
-    return NextResponse.json(comments);
+    return NextResponse.json(testRuns);
   } catch (error) {
-    console.error('Error fetching comments:', error);
+    console.error('Error fetching test runs:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
@@ -43,45 +42,25 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { testCaseId, text, type, attachments } = body;
+    const { testCaseId, status, stepResults, notes } = body;
 
-    if (!testCaseId || !text) {
-      return NextResponse.json({ error: 'Test Case ID and text are required' }, { status: 400 });
+    if (!testCaseId || !status) {
+      return NextResponse.json({ error: 'Test Case ID and status are required' }, { status: 400 });
     }
 
-    const comment = await prisma.comment.create({
+    const testRun = await prisma.testCaseCheck.create({
       data: {
         testCaseId,
         userId: session.user.id,
-        text,
-        type: type || 'comment',
+        status,
+        stepResults,
+        notes,
       },
     });
 
-    if (attachments && attachments.length > 0) {
-      await prisma.attachment.createMany({
-        data: attachments.map((att: any) => ({
-          commentId: comment.id,
-          name: att.name,
-          url: att.url,
-          type: att.type,
-        })),
-      });
-    }
-
-    const fullComment = await prisma.comment.findUnique({
-      where: { id: comment.id },
-      include: {
-        attachments: true,
-        user: {
-          select: { id: true, name: true, image: true },
-        },
-      },
-    });
-
-    return NextResponse.json(fullComment);
+    return NextResponse.json(testRun);
   } catch (error) {
-    console.error('Error creating comment:', error);
+    console.error('Error creating test run:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

@@ -1,21 +1,20 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import dynamic from 'next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Plus, ArrowLeft, Settings, Users, CheckCircle, XCircle, Clock, 
-  MessageSquare, MoreVertical, Edit2, Trash2, ChevronRight 
-} from 'lucide-react';
+import dynamic from 'next/dynamic';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { Plus, ArrowLeft, Edit2, Trash2, ChevronRight, MessageSquare, CheckCircle, XCircle, Clock, Play, Image, Paperclip, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
 
-const ReactFlow = dynamic(() => import('reactflow'), { ssr: false });
-import 'reactflow/dist/style.css';
+const ReactFlow = dynamic(() => import('reactflow').then(m => ({ default: m.ReactFlow })), { ssr: false });
+const CustomNode = dynamic(() => import('@/components/testcase/CustomNode').then(m => ({ default: m.CustomNode })), { ssr: false });
 
 interface TestCase {
   id: string;
@@ -67,10 +66,13 @@ export default function ProjectPage() {
   const [formData, setFormData] = useState({ title: '', description: '', parentId: '' as string | null });
   const [steps, setSteps] = useState<{ text: string; imageUrl: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'steps' | 'comments'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'steps' | 'comments' | 'history'>('details');
   const [commentText, setCommentText] = useState('');
   const [commentType, setCommentType] = useState<'comment' | 'bug'>('comment');
   const [comments, setComments] = useState<any[]>([]);
+  const [commentAttachments, setCommentAttachments] = useState<{ name: string; url: string; type: string }[]>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [testHistory, setTestHistory] = useState<any[]>([]);
 
   useEffect(() => {
     if (projectId) fetchData();
@@ -97,6 +99,15 @@ export default function ProjectPage() {
       if (res.ok) setComments(await res.json());
     } catch (error) {
       console.error('Error fetching comments:', error);
+    }
+  };
+
+  const fetchTestHistory = async (testCaseId: string) => {
+    try {
+      const res = await fetch(`/api/test-runs?testCaseId=${testCaseId}`);
+      if (res.ok) setTestHistory(await res.json());
+    } catch (error) {
+      console.error('Error fetching test history:', error);
     }
   };
 
@@ -199,20 +210,58 @@ export default function ProjectPage() {
   };
 
   const handleAddComment = async () => {
-    if (!commentText.trim() || !selectedTestCase) return;
+    if (!commentText.trim() && commentAttachments.length === 0 || !selectedTestCase) return;
     try {
       const res = await fetch('/api/comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testCaseId: selectedTestCase.id, text: commentText, type: commentType }),
+        body: JSON.stringify({ 
+          testCaseId: selectedTestCase.id, 
+          text: commentText, 
+          type: commentType,
+          attachments: commentAttachments,
+        }),
       });
       if (res.ok) {
         setCommentText('');
+        setCommentAttachments([]);
         fetchComments(selectedTestCase.id);
       }
     } catch (error) {
       console.error('Error adding comment:', error);
     }
+  };
+
+  const handleUploadAttachment = async (e: React.ChangeEvent<HTMLInputElement>, isImage: boolean) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setUploadingAttachment(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setCommentAttachments(prev => [...prev, { 
+          name: data.filename || data.name || file.name, 
+          url: data.url, 
+          type: isImage ? 'image' : 'file' 
+        }]);
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error);
+    }
+    setUploadingAttachment(false);
+  };
+
+  const removeAttachment = (index: number) => {
+    setCommentAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const openEditModal = (tc: TestCase) => {
@@ -254,6 +303,10 @@ export default function ProjectPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => router.push(`/project/${projectId}/run`)}>
+            <Play className="w-4 h-4 mr-2" />
+            Run Test
+          </Button>
           <Button onClick={() => { setEditingTestCase(null); setFormData({ title: '', description: '', parentId: null }); setSteps([]); setIsModalOpen(true); }}>
             <Plus className="w-4 h-4 mr-2" />
             {t('testCase.create')}
@@ -266,36 +319,14 @@ export default function ProjectPage() {
           <ReactFlow
             nodes={nodes.map(n => ({
               ...n,
-              type: 'default',
-              style: { background: 'rgba(26, 26, 37, 0.8)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', padding: '12px', width: 200 },
+              type: 'custom',
             }))}
             edges={edges.map(e => ({ ...e, animated: false, style: { stroke: 'rgba(255,255,255,0.1)' } }))}
             onNodeClick={handleNodeClick}
             fitView
             attributionPosition="bottom-left"
+            nodeTypes={{ custom: CustomNode }}
           >
-            {nodes.map(node => {
-              const StatusIcon = statusIcons[node.data.status as keyof typeof statusIcons];
-              const colors = statusColors[node.data.status as keyof typeof statusColors];
-              return (
-                <div key={node.id} className="w-[180px]">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`w-2 h-2 rounded-full ${colors.bg.replace('/20', '')}`} />
-                    <span className="font-medium text-sm truncate">{node.data.title}</span>
-                  </div>
-                  <div className={`flex items-center gap-1 text-xs ${colors.text}`}>
-                    <StatusIcon className="w-3 h-3" />
-                    <span>{t(`testCase.${node.data.status}`)}</span>
-                  </div>
-                  {node.data._count?.comments > 0 && (
-                    <div className="flex items-center gap-1 text-xs text-text-muted mt-1">
-                      <MessageSquare className="w-3 h-3" />
-                      <span>{node.data._count.comments}</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
           </ReactFlow>
         </div>
 
@@ -322,24 +353,30 @@ export default function ProjectPage() {
                 </div>
               </div>
 
-              <div className="flex border-b border-border">
-                {(['details', 'steps', 'comments'] as const).map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => { setActiveTab(tab); if (tab === 'comments') fetchComments(selectedTestCase.id); }}
-                    className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === tab ? 'text-accent border-b-2 border-accent' : 'text-text-muted'}`}
-                  >
-                    {t(`testCase.${tab}`)}
-                  </button>
-                ))}
-              </div>
+                <div className="flex border-b border-border">
+                  {(['details', 'steps', 'comments', 'history'] as const).map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => { 
+                        setActiveTab(tab); 
+                        if (tab === 'comments') fetchComments(selectedTestCase.id);
+                        if (tab === 'history') fetchTestHistory(selectedTestCase.id);
+                      }}
+                      className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === tab ? 'text-accent border-b-2 border-accent' : 'text-text-muted'}`}
+                    >
+                      {tab === 'history' ? 'History' : t(`testCase.${tab}`)}
+                    </button>
+                  ))}
+                </div>
 
               <div className="flex-1 overflow-y-auto p-4">
                 {activeTab === 'details' && (
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm text-text-muted">{t('testCase.description')}</label>
-                      <p className="text-text-secondary mt-1">{selectedTestCase.description || '-'}</p>
+                      <div className="text-text-secondary mt-1 prose prose-invert prose-sm max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedTestCase.description || '-'}</ReactMarkdown>
+                      </div>
                     </div>
                     <div>
                       <label className="text-sm text-text-muted">{t('testCase.status')}</label>
@@ -377,7 +414,9 @@ export default function ProjectPage() {
                           <div className="flex items-start gap-3">
                             <span className="w-6 h-6 rounded-full bg-accent/20 text-accent text-sm flex items-center justify-center shrink-0">{i + 1}</span>
                             <div className="flex-1">
-                              <p className="text-text-secondary">{step.text}</p>
+                              <div className="text-text-secondary prose prose-invert prose-sm max-w-none">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{step.text}</ReactMarkdown>
+                              </div>
                               {step.imageUrl && <img src={step.imageUrl} alt="" className="mt-2 rounded-lg max-w-full" />}
                             </div>
                           </div>
@@ -395,7 +434,42 @@ export default function ProjectPage() {
                         <option value="bug">{t('comment.bug')}</option>
                       </select>
                       <Textarea value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder={t('comment.placeholder')} rows={2} />
-                      <Button onClick={handleAddComment} size="sm">{t('comment.submit')}</Button>
+                      
+                      {commentAttachments.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {commentAttachments.map((att, i) => (
+                            <div key={i} className="flex items-center gap-1 glass rounded-lg px-2 py-1 text-xs">
+                              {att.type === 'image' ? <Image className="w-3 h-3" /> : <Paperclip className="w-3 h-3" />}
+                              <span className="truncate max-w-[100px]">{att.name}</span>
+                              <button onClick={() => removeAttachment(i)} className="text-error hover:text-error/80">×</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center gap-2">
+                        <label className={`p-2 rounded-lg glass hover:bg-accent/20 cursor-pointer ${uploadingAttachment ? 'opacity-50' : ''}`}>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            className="hidden" 
+                            onChange={(e) => handleUploadAttachment(e, true)}
+                            disabled={uploadingAttachment}
+                          />
+                          <Image className="w-4 h-4" />
+                        </label>
+                        <label className={`p-2 rounded-lg glass hover:bg-accent/20 cursor-pointer ${uploadingAttachment ? 'opacity-50' : ''}`}>
+                          <input 
+                            type="file" 
+                            className="hidden" 
+                            onChange={(e) => handleUploadAttachment(e, false)}
+                            disabled={uploadingAttachment}
+                          />
+                          <Paperclip className="w-4 h-4" />
+                        </label>
+                        <div className="flex-1" />
+                        <Button onClick={handleAddComment} size="sm">{t('comment.submit')}</Button>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       {comments.map(c => (
@@ -406,10 +480,80 @@ export default function ProjectPage() {
                             </span>
                             <span className="text-xs text-text-muted">{new Date(c.createdAt).toLocaleString('th-TH')}</span>
                           </div>
-                          <p className="text-text-secondary text-sm">{c.text}</p>
+                          <div className="text-text-secondary text-sm whitespace-pre-wrap prose prose-invert prose-sm max-w-none">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.text}</ReactMarkdown>
+                          </div>
+                          
+                          {c.attachments && c.attachments.length > 0 && (
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {c.attachments.map((att: any) => (
+                                att.type === 'image' ? (
+                                  <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer">
+                                    <img src={att.url} alt={att.name} className="w-20 h-20 object-cover rounded-lg" />
+                                  </a>
+                                ) : (
+                                  <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-2 py-1 glass rounded-lg text-xs">
+                                    <Paperclip className="w-3 h-3" />
+                                    {att.name}
+                                  </a>
+                                )
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {activeTab === 'history' && (
+                  <div className="space-y-4">
+                    {testHistory.length === 0 ? (
+                      <p className="text-text-muted text-center py-4">No test history yet</p>
+                    ) : (
+                      testHistory.map((run, i) => (
+                        <div key={run.id} className={`glass rounded-xl p-4 ${run.status === 'pass' ? 'border-l-4 border-green-500' : run.status === 'fail' ? 'border-l-4 border-red-500' : 'border-l-4 border-yellow-500'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              {run.status === 'pass' ? (
+                                <CheckCircle className="w-5 h-5 text-green-500" />
+                              ) : run.status === 'fail' ? (
+                                <XCircle className="w-5 h-5 text-red-500" />
+                              ) : (
+                                <Clock className="w-5 h-5 text-yellow-500" />
+                              )}
+                              <span className={`font-semibold ${run.status === 'pass' ? 'text-green-400' : run.status === 'fail' ? 'text-red-400' : 'text-yellow-400'}`}>
+                                {run.status === 'pass' ? 'Passed' : run.status === 'fail' ? 'Failed' : 'Pending'}
+                              </span>
+                            </div>
+                            <span className="text-xs text-text-muted">
+                              {new Date(run.checkedAt).toLocaleString('th-TH')}
+                            </span>
+                          </div>
+                          
+                          {run.stepResults && (
+                            <div className="text-sm text-text-muted mb-2">
+                              {(() => {
+                                try {
+                                  const results = JSON.parse(run.stepResults);
+                                  const passed = results.filter((r: any) => r.status === 'pass').length;
+                                  const failed = results.filter((r: any) => r.status === 'fail').length;
+                                  return `${passed}/${results.length} steps passed`;
+                                } catch {
+                                  return '';
+                                }
+                              })()}
+                            </div>
+                          )}
+                          
+                          {run.notes && (
+                            <div className="text-text-secondary text-sm mt-2 p-2 bg-bg-primary/50 rounded">
+                              {run.notes}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
                   </div>
                 )}
               </div>

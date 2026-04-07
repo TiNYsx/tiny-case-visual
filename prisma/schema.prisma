@@ -106,5 +106,7 @@ model TestCaseCheck {
   testCaseId   String
   userId       String
   status       String
+  notes        String?  @db.Text
+  stepResults  Json?
   checkedAt    DateTime @default(now())
 }
