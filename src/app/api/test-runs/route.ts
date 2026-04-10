@@ -24,6 +24,14 @@ export async function GET(request: NextRequest) {
         user: {
           select: { id: true, name: true, image: true },
         },
+        comments: {
+          include: {
+            attachments: true,
+            user: {
+              select: { id: true, name: true, image: true },
+            },
+          },
+        },
       },
     });
 
@@ -42,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { testCaseId, status, stepResults, notes } = body;
+    const { testCaseId, status, stepResults, notes, testData, actualResult, testCaseType } = body;
 
     if (!testCaseId || !status) {
       return NextResponse.json({ error: 'Test Case ID and status are required' }, { status: 400 });
@@ -55,8 +63,17 @@ export async function POST(request: NextRequest) {
         status,
         stepResults,
         notes,
+        testData,
+        actualResult,
       },
     });
+
+    if (testCaseType) {
+      await prisma.testCase.update({
+        where: { id: testCaseId },
+        data: { testCaseType },
+      });
+    }
 
     return NextResponse.json(testRun);
   } catch (error) {

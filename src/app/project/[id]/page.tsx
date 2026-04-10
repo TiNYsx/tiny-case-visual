@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback, Suspense } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Plus, ArrowLeft, Edit2, Trash2, ChevronRight, MessageSquare, CheckCircle, XCircle, Clock, Play, Image, Paperclip, Upload } from 'lucide-react';
+import { Plus, ArrowLeft, Edit2, Trash2, ChevronRight, MessageSquare, CheckCircle, XCircle, Clock, Play, Image, Paperclip, Link2, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -18,16 +18,35 @@ const CustomNode = dynamic(() => import('@/components/testcase/CustomNode').then
 
 const nodeTypes = { custom: CustomNode };
 
+interface TestCaseStep {
+  id: string;
+  text: string;
+  imageUrl: string | null;
+  order: number;
+}
+
+interface TestCaseConnection {
+  id: string;
+  sourceId: string;
+  targetId: string;
+}
+
 interface TestCase {
   id: string;
   title: string;
   description: string | null;
-  parentId: string | null;
+  testCaseType: string | null;
+  testData: string | null;
+  expectedResult: string | null;
+  positionX: number | null;
+  positionY: number | null;
   status: string;
   createdAt: string;
   updatedAt: string;
   checkedAt: string | null;
-  steps: { id: string; text: string; imageUrl: string | null; order: number }[];
+  steps: TestCaseStep[];
+  connectionsAsSource: TestCaseConnection[];
+  connectionsAsTarget: TestCaseConnection[];
   _count: { comments: number };
 }
 
@@ -38,18 +57,6 @@ interface Project {
   createdAt: string;
   createdBy: { id: string; displayName: string; photoURL: string | null };
 }
-
-const statusColors = {
-  pending: { bg: 'bg-yellow-500/20', text: 'text-yellow-500', border: 'border-yellow-500/30' },
-  pass: { bg: 'bg-green-500/20', text: 'text-green-500', border: 'border-green-500/30' },
-  fail: { bg: 'bg-red-500/20', text: 'text-red-500', border: 'border-red-500/30' },
-};
-
-const statusIcons = {
-  pending: Clock,
-  pass: CheckCircle,
-  fail: XCircle,
-};
 
 export default function ProjectPage() {
   const { t } = useTranslation();
@@ -65,16 +72,23 @@ export default function ProjectPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTestCase, setEditingTestCase] = useState<TestCase | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ title: '', description: '', parentId: '' as string | null });
+  const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const [tempEdge, setTempEdge] = useState<{ source: string; targetX: number; targetY: number } | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    testCaseType: '' as string | null,
+    testData: '',
+    expectedResult: '',
+  });
   const [steps, setSteps] = useState<{ text: string; imageUrl: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'steps' | 'comments' | 'history'>('details');
-  const [commentText, setCommentText] = useState('');
-  const [commentType, setCommentType] = useState<'comment' | 'bug'>('comment');
-  const [comments, setComments] = useState<any[]>([]);
-  const [commentAttachments, setCommentAttachments] = useState<{ name: string; url: string; type: string }[]>([]);
-  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [activeTab, setActiveTab] = useState<'details' | 'steps' | 'history'>('details');
   const [testHistory, setTestHistory] = useState<any[]>([]);
+
+  const reactFlowWrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (projectId) fetchData();
@@ -95,15 +109,6 @@ export default function ProjectPage() {
     }
   };
 
-  const fetchComments = async (testCaseId: string) => {
-    try {
-      const res = await fetch(`/api/comments?testCaseId=${testCaseId}`);
-      if (res.ok) setComments(await res.json());
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-    }
-  };
-
   const fetchTestHistory = async (testCaseId: string) => {
     try {
       const res = await fetch(`/api/test-runs?testCaseId=${testCaseId}`);
@@ -114,46 +119,73 @@ export default function ProjectPage() {
   };
 
   const nodes = useMemo(() => {
-    const nodeMap = new Map();
-    testCases.forEach(tc => {
-      nodeMap.set(tc.id, { ...tc, children: [] as TestCase[] });
-    });
-    testCases.forEach(tc => {
-      if (tc.parentId && nodeMap.has(tc.parentId)) {
-        nodeMap.get(tc.parentId).children.push(tc);
-      }
-    });
-    const roots = Array.from(nodeMap.values()).filter((tc: any) => !tc.parentId);
-    
-    const result: any[] = [];
-    let yOffset = 0;
-    const traverse = (nodes: any[], x: number, y: number, level: number) => {
-      nodes.forEach((node, i) => {
-        result.push({
-          id: node.id,
-          position: { x: x + level * 300, y: y + i * 120 + yOffset },
-          data: node,
-        });
-        if (node.children && node.children.length > 0) {
-          traverse(node.children, x, y + i * 120 + yOffset, level + 1);
-        }
-      });
-      if (nodes.length > 0) yOffset += (nodes.length - 1) * 120;
-    };
-    traverse(roots, 100, 100, 0);
-    return result;
+    return testCases.map(tc => ({
+      id: tc.id,
+      position: { 
+        x: tc.positionX ?? 100 + Math.random() * 500, 
+        y: tc.positionY ?? 100 + Math.random() * 300 
+      },
+      data: tc,
+    }));
   }, [testCases]);
 
   const edges = useMemo(() => {
-    return testCases
-      .filter(tc => tc.parentId)
-      .map(tc => ({
-        id: `e-${tc.parentId}-${tc.id}`,
-        source: tc.parentId!,
-        target: tc.id,
-        type: 'smoothstep',
-      }));
+    const edgeList: any[] = [];
+    testCases.forEach(tc => {
+      tc.connectionsAsSource.forEach(conn => {
+        edgeList.push({
+          id: conn.id,
+          source: conn.sourceId,
+          target: conn.targetId,
+          type: 'smoothstep',
+          animated: false,
+          style: { stroke: 'rgba(255,255,255,0.2)' },
+        });
+      });
+    });
+    return edgeList;
   }, [testCases]);
+
+  const handleConnect = useCallback(async (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    try {
+      const res = await fetch('/api/connections', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceId, targetId }),
+      });
+      if (res.ok) {
+        fetchData();
+      }
+    } catch (error) {
+      console.error('Error creating connection:', error);
+    }
+  }, []);
+
+  const handleDeleteConnection = useCallback(async (sourceId: string, targetId: string) => {
+    try {
+      const res = await fetch(`/api/connections?sourceId=${sourceId}&targetId=${targetId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        fetchData();
+      }
+    } catch (error) {
+      console.error('Error deleting connection:', error);
+    }
+  }, []);
+
+  const handleNodeDragStop = useCallback(async (event: React.MouseEvent, node: any) => {
+    try {
+      await fetch(`/api/testcases/${node.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ positionX: node.position.x, positionY: node.position.y }),
+      });
+    } catch (error) {
+      console.error('Error saving position:', error);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -161,15 +193,26 @@ export default function ProjectPage() {
     try {
       const url = editingTestCase ? `/api/testcases/${editingTestCase.id}` : '/api/testcases';
       const method = editingTestCase ? 'PUT' : 'POST';
+      
+      const body: any = {
+        ...formData,
+        projectId,
+        steps,
+      };
+      
+      if (editingTestCase) {
+        body.connections = editingTestCase.connectionsAsSource.map(c => ({ targetId: c.targetId }));
+      }
+      
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, projectId, steps }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         setIsModalOpen(false);
         setEditingTestCase(null);
-        setFormData({ title: '', description: '', parentId: null });
+        setFormData({ title: '', description: '', testCaseType: null, testData: '', expectedResult: '' });
         setSteps([]);
         fetchData();
       }
@@ -193,82 +236,15 @@ export default function ProjectPage() {
     }
   };
 
-  const handleStatusChange = async (id: string, status: 'pass' | 'fail') => {
-    try {
-      const res = await fetch(`/api/testcases/${id}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      });
-      if (res.ok) {
-        fetchData();
-        if (selectedTestCase?.id === id) {
-          setSelectedTestCase(prev => prev ? { ...prev, status } : null);
-        }
-      }
-    } catch (error) {
-      console.error('Error updating status:', error);
-    }
-  };
-
-  const handleAddComment = async () => {
-    if (!commentText.trim() && commentAttachments.length === 0 || !selectedTestCase) return;
-    try {
-      const res = await fetch('/api/comments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          testCaseId: selectedTestCase.id, 
-          text: commentText, 
-          type: commentType,
-          attachments: commentAttachments,
-        }),
-      });
-      if (res.ok) {
-        setCommentText('');
-        setCommentAttachments([]);
-        fetchComments(selectedTestCase.id);
-      }
-    } catch (error) {
-      console.error('Error adding comment:', error);
-    }
-  };
-
-  const handleUploadAttachment = async (e: React.ChangeEvent<HTMLInputElement>, isImage: boolean) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setUploadingAttachment(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      if (res.ok) {
-        const data = await res.json();
-        setCommentAttachments(prev => [...prev, { 
-          name: data.filename || data.name || file.name, 
-          url: data.url, 
-          type: isImage ? 'image' : 'file' 
-        }]);
-      }
-    } catch (error) {
-      console.error('Error uploading file:', error);
-    }
-    setUploadingAttachment(false);
-  };
-
-  const removeAttachment = (index: number) => {
-    setCommentAttachments(prev => prev.filter((_, i) => i !== index));
-  };
-
   const openEditModal = (tc: TestCase) => {
     setEditingTestCase(tc);
-    setFormData({ title: tc.title, description: tc.description || '', parentId: tc.parentId });
+    setFormData({
+      title: tc.title,
+      description: tc.description || '',
+      testCaseType: tc.testCaseType,
+      testData: tc.testData || '',
+      expectedResult: tc.expectedResult || '',
+    });
     setSteps(tc.steps ? tc.steps.map(s => ({ text: s.text, imageUrl: s.imageUrl || '' })) : []);
     setIsModalOpen(true);
   };
@@ -277,9 +253,56 @@ export default function ProjectPage() {
   const removeStep = (index: number) => setSteps(steps.filter((_, i) => i !== index));
 
   const handleNodeClick = (_: any, node: any) => {
-    setSelectedTestCase(node.data);
-    setActiveTab('details');
-    fetchComments(node.data.id);
+    if (connectingFrom) {
+      handleConnect(connectingFrom, node.id);
+      setConnectingFrom(null);
+    } else {
+      setSelectedTestCase(node.data);
+      setActiveTab('details');
+    }
+  };
+
+  const handlePaneClick = () => {
+    if (connectingFrom) {
+      setConnectingFrom(null);
+    }
+  };
+
+  const handleStartConnect = (nodeId: string, x: number, y: number) => {
+    setConnectingFrom(nodeId);
+    setMousePos({ x, y });
+  };
+
+  const handleMouseMove = useCallback((e: any) => {
+    if (connectingFrom) {
+      const bounds = reactFlowWrapperRef.current?.getBoundingClientRect();
+      if (bounds) {
+        setMousePos({ x: e.clientX - bounds.left, y: e.clientY - bounds.top });
+      }
+    }
+  }, [connectingFrom]);
+
+  const handleAddNode = () => {
+    setEditingTestCase(null);
+    setFormData({ title: '', description: '', testCaseType: null, testData: '', expectedResult: '' });
+    setSteps([]);
+    setIsModalOpen(true);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pass': return 'text-green-400';
+      case 'fail': return 'text-red-400';
+      default: return 'text-yellow-400';
+    }
+  };
+
+  const getStatusBg = (status: string) => {
+    switch (status) {
+      case 'pass': return 'bg-green-500/20';
+      case 'fail': return 'bg-red-500/20';
+      default: return 'bg-yellow-500/20';
+    }
   };
 
   if (loading) {
@@ -294,42 +317,70 @@ export default function ProjectPage() {
 
   return (
     <div className="h-screen flex flex-col bg-grid bg-gradient-radial overflow-hidden">
-      <header className="glass border-b border-border px-6 py-3 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.push('/')}>
+      <header className="glass border-b border-border px-3 sm:px-6 py-2 sm:py-3 flex items-center justify-between shrink-0 gap-2">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+          <Button variant="ghost" size="sm" className="!p-1.5 shrink-0" onClick={() => router.push('/')}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <div>
-            <h1 className="text-lg font-bold">{project?.name}</h1>
-            <p className="text-sm text-text-secondary">{project?.description || '-'}</p>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-lg font-bold truncate">{project?.name}</h1>
+            <p className="text-xs sm:text-sm text-text-secondary hidden sm:block">{project?.description || '-'}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="secondary" onClick={() => router.push(`/project/${projectId}/run`)}>
+        <div className="flex items-center gap-2 shrink-0">
+          {connectingFrom && (
+            <Button variant="danger" size="sm" onClick={() => setConnectingFrom(null)}>
+              <X className="w-4 h-4 mr-1" />
+              Cancel
+            </Button>
+          )}
+          <Button variant="secondary" size="sm" className="hidden sm:flex" onClick={() => router.push(`/project/${projectId}/run`)}>
             <Play className="w-4 h-4 mr-2" />
-            Run Test
+            <span className="hidden md:inline">Run Test</span>
           </Button>
-          <Button onClick={() => { setEditingTestCase(null); setFormData({ title: '', description: '', parentId: null }); setSteps([]); setIsModalOpen(true); }}>
+          <Button variant="secondary" size="sm" className="sm:hidden !px-2" onClick={() => router.push(`/project/${projectId}/run`)}>
+            <Play className="w-4 h-4" />
+          </Button>
+          <Button size="sm" className="hidden sm:flex" onClick={handleAddNode}>
             <Plus className="w-4 h-4 mr-2" />
             {t('testCase.create')}
+          </Button>
+          <Button size="sm" className="sm:hidden !px-2" onClick={handleAddNode}>
+            <Plus className="w-4 h-4" />
           </Button>
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 relative">
+      <div className="flex-1 flex overflow-hidden relative" ref={reactFlowWrapperRef}>
+        <div className="flex-1 relative min-w-0">
           <ReactFlow
             nodes={nodes.map(n => ({
               ...n,
               type: 'custom',
             }))}
-            edges={edges.map(e => ({ ...e, animated: false, style: { stroke: 'rgba(255,255,255,0.1)' } }))}
+            edges={edges}
             onNodeClick={handleNodeClick}
+            onNodeDragStop={handleNodeDragStop}
+            onPaneClick={handlePaneClick}
+            onMouseMove={handleMouseMove}
             fitView
             attributionPosition="bottom-left"
             nodeTypes={nodeTypes}
           >
           </ReactFlow>
+          
+          {connectingFrom && (
+            <div 
+              className="pointer-events-none absolute border-2 border-dashed border-accent rounded-full"
+              style={{
+                left: 0,
+                top: 0,
+                width: '100%',
+                height: '100%',
+                zIndex: 1000,
+              }}
+            />
+          )}
         </div>
 
         <AnimatePresence>
@@ -338,33 +389,42 @@ export default function ProjectPage() {
               initial={{ x: 400, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 400, opacity: 0 }}
-              className="w-[400px] glass border-l border-border flex flex-col overflow-hidden"
+              className="w-full sm:w-[350px] md:w-[400px] glass border-l border-border flex flex-col overflow-hidden absolute sm:relative right-0 top-0 bottom-0 z-50 sm:z-auto"
             >
-              <div className="p-4 border-b border-border flex items-center justify-between">
-                <h3 className="font-semibold truncate">{selectedTestCase.title}</h3>
+              <div className="p-3 sm:p-4 border-b border-border flex items-center justify-between shrink-0">
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold truncate text-sm sm:text-base">{selectedTestCase.title}</h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`text-xs px-2 py-0.5 rounded ${getStatusBg(selectedTestCase.status)} ${getStatusColor(selectedTestCase.status)}`}>
+                      {selectedTestCase.status === 'pass' ? 'Passed' : selectedTestCase.status === 'fail' ? 'Failed' : 'Pending'}
+                    </span>
+                    {selectedTestCase.testCaseType && (
+                      <span className="text-xs text-text-muted">{selectedTestCase.testCaseType}</span>
+                    )}
+                  </div>
+                </div>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => openEditModal(selectedTestCase)}>
+                  <Button variant="ghost" size="sm" className="!p-1" onClick={() => openEditModal(selectedTestCase)}>
                     <Edit2 className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(selectedTestCase.id)}>
+                  <Button variant="ghost" size="sm" className="!p-1" onClick={() => setDeleteConfirm(selectedTestCase.id)}>
                     <Trash2 className="w-4 h-4 text-error" />
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setSelectedTestCase(null)}>
+                  <Button variant="ghost" size="sm" className="!p-1 sm:hidden" onClick={() => setSelectedTestCase(null)}>
                     <ChevronRight className="w-4 h-4" />
                   </Button>
                 </div>
               </div>
 
-                <div className="flex border-b border-border">
-                  {(['details', 'steps', 'comments', 'history'] as const).map(tab => (
+                <div className="flex border-b border-border overflow-x-auto">
+                  {(['details', 'steps', 'history'] as const).map(tab => (
                     <button
                       key={tab}
                       onClick={() => { 
                         setActiveTab(tab); 
-                        if (tab === 'comments') fetchComments(selectedTestCase.id);
                         if (tab === 'history') fetchTestHistory(selectedTestCase.id);
                       }}
-                      className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === tab ? 'text-accent border-b-2 border-accent' : 'text-text-muted'}`}
+                      className={`flex-1 py-2 sm:py-3 px-1 sm:px-3 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${activeTab === tab ? 'text-accent border-b-2 border-accent' : 'text-text-muted'}`}
                     >
                       {tab === 'history' ? 'History' : t(`testCase.${tab}`)}
                     </button>
@@ -374,42 +434,87 @@ export default function ProjectPage() {
               <div className="flex-1 overflow-y-auto p-4">
                 {activeTab === 'details' && (
                   <div className="space-y-4">
-                    <div>
-                      <label className="text-sm text-text-muted">{t('testCase.description')}</label>
-                      <div className="text-text-secondary mt-1 prose prose-invert prose-sm max-w-none">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedTestCase.description || '-'}</ReactMarkdown>
+                    {selectedTestCase.description && (
+                      <div>
+                        <label className="text-sm text-text-muted">Description</label>
+                        <div className="text-text-secondary mt-1 prose prose-invert prose-sm max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedTestCase.description}</ReactMarkdown>
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <label className="text-sm text-text-muted">{t('testCase.status')}</label>
-                      <div className="flex gap-2 mt-2">
-                        <Button size="sm" variant={selectedTestCase.status === 'pass' ? 'primary' : 'secondary'} onClick={() => handleStatusChange(selectedTestCase.id, 'pass')}>
-                          <CheckCircle className="w-4 h-4 mr-1" />
-                          {t('testCase.pass')}
-                        </Button>
-                        <Button size="sm" variant={selectedTestCase.status === 'fail' ? 'danger' : 'secondary'} onClick={() => handleStatusChange(selectedTestCase.id, 'fail')}>
-                          <XCircle className="w-4 h-4 mr-1" />
-                          {t('testCase.fail')}
-                        </Button>
+                    )}
+                    
+                    {selectedTestCase.testCaseType && (
+                      <div>
+                        <label className="text-sm text-text-muted">Test Case Type</label>
+                        <p className="text-text-secondary mt-1">{selectedTestCase.testCaseType}</p>
                       </div>
-                    </div>
+                    )}
+                    
+                    {selectedTestCase.testData && (
+                      <div>
+                        <label className="text-sm text-text-muted">Test Data</label>
+                        <div className="text-text-secondary mt-1 prose prose-invert prose-sm max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedTestCase.testData}</ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {selectedTestCase.expectedResult && (
+                      <div>
+                        <label className="text-sm text-text-muted">Expected Result</label>
+                        <div className="text-text-secondary mt-1 prose prose-invert prose-sm max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedTestCase.expectedResult}</ReactMarkdown>
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <label className="text-text-muted">{t('testCase.checkedAt')}</label>
+                        <label className="text-text-muted">Last Run</label>
                         <p className="text-text-secondary">{selectedTestCase.checkedAt ? new Date(selectedTestCase.checkedAt).toLocaleString('th-TH') : '-'}</p>
                       </div>
                       <div>
-                        <label className="text-text-muted">{t('project.createdAt')}</label>
+                        <label className="text-text-muted">Created</label>
                         <p className="text-text-secondary">{new Date(selectedTestCase.createdAt).toLocaleDateString('th-TH')}</p>
                       </div>
                     </div>
+
+                    {(selectedTestCase.connectionsAsSource.length > 0 || selectedTestCase.connectionsAsTarget.length > 0) && (
+                      <div>
+                        <label className="text-sm text-text-muted mb-2 block">Connections</label>
+                        <div className="space-y-1">
+                          {selectedTestCase.connectionsAsSource.map(conn => {
+                            const targetNode = testCases.find(tc => tc.id === conn.targetId);
+                            return targetNode ? (
+                              <div key={conn.id} className="flex items-center justify-between glass rounded-lg px-3 py-2 text-sm">
+                                <span className="text-text-secondary truncate">→ {targetNode.title}</span>
+                                <button onClick={() => handleDeleteConnection(conn.sourceId, conn.targetId)} className="text-error hover:text-error/80">
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : null;
+                          })}
+                          {selectedTestCase.connectionsAsTarget.map(conn => {
+                            const sourceNode = testCases.find(tc => tc.id === conn.sourceId);
+                            return sourceNode ? (
+                              <div key={conn.id} className="flex items-center justify-between glass rounded-lg px-3 py-2 text-sm">
+                                <span className="text-text-secondary truncate">{sourceNode.title} →</span>
+                                <button onClick={() => handleDeleteConnection(conn.sourceId, conn.targetId)} className="text-error hover:text-error/80">
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ) : null;
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {activeTab === 'steps' && (
                   <div className="space-y-4">
                     {!selectedTestCase.steps || selectedTestCase.steps.length === 0 ? (
-                      <p className="text-text-muted text-center py-4">{t('testCase.addStep')}</p>
+                      <p className="text-text-muted text-center py-4">No steps defined</p>
                     ) : (
                       selectedTestCase.steps.map((step, i) => (
                         <div key={step.id} className="glass rounded-xl p-3">
@@ -428,92 +533,12 @@ export default function ProjectPage() {
                   </div>
                 )}
 
-                {activeTab === 'comments' && (
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <select value={commentType} onChange={(e) => setCommentType(e.target.value as 'comment' | 'bug')} className="glass-input w-full px-3 py-2 rounded-xl text-sm">
-                        <option value="comment">{t('comment.normal')}</option>
-                        <option value="bug">{t('comment.bug')}</option>
-                      </select>
-                      <Textarea value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder={t('comment.placeholder')} rows={2} />
-                      
-                      {commentAttachments.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {commentAttachments.map((att, i) => (
-                            <div key={i} className="flex items-center gap-1 glass rounded-lg px-2 py-1 text-xs">
-                              {att.type === 'image' ? <Image className="w-3 h-3" /> : <Paperclip className="w-3 h-3" />}
-                              <span className="truncate max-w-[100px]">{att.name}</span>
-                              <button onClick={() => removeAttachment(i)} className="text-error hover:text-error/80">×</button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center gap-2">
-                        <label className={`p-2 rounded-lg glass hover:bg-accent/20 cursor-pointer ${uploadingAttachment ? 'opacity-50' : ''}`}>
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            className="hidden" 
-                            onChange={(e) => handleUploadAttachment(e, true)}
-                            disabled={uploadingAttachment}
-                          />
-                          <Image className="w-4 h-4" />
-                        </label>
-                        <label className={`p-2 rounded-lg glass hover:bg-accent/20 cursor-pointer ${uploadingAttachment ? 'opacity-50' : ''}`}>
-                          <input 
-                            type="file" 
-                            className="hidden" 
-                            onChange={(e) => handleUploadAttachment(e, false)}
-                            disabled={uploadingAttachment}
-                          />
-                          <Paperclip className="w-4 h-4" />
-                        </label>
-                        <div className="flex-1" />
-                        <Button onClick={handleAddComment} size="sm">{t('comment.submit')}</Button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      {comments.map(c => (
-                        <div key={c.id} className={`glass rounded-xl p-3 ${c.type === 'bug' ? 'border border-error/30' : ''}`}>
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className={`text-xs px-2 py-0.5 rounded ${c.type === 'bug' ? 'bg-error/20 text-error' : 'bg-accent/20 text-accent'}`}>
-                              {t(`comment.${c.type}`)}
-                            </span>
-                            <span className="text-xs text-text-muted">{new Date(c.createdAt).toLocaleString('th-TH')}</span>
-                          </div>
-                          <div className="text-text-secondary text-sm whitespace-pre-wrap prose prose-invert prose-sm max-w-none">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.text}</ReactMarkdown>
-                          </div>
-                          
-                          {c.attachments && c.attachments.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mt-2">
-                              {c.attachments.map((att: any) => (
-                                att.type === 'image' ? (
-                                  <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer">
-                                    <img src={att.url} alt={att.name} className="w-20 h-20 object-cover rounded-lg" />
-                                  </a>
-                                ) : (
-                                  <a key={att.id} href={att.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 px-2 py-1 glass rounded-lg text-xs">
-                                    <Paperclip className="w-3 h-3" />
-                                    {att.name}
-                                  </a>
-                                )
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {activeTab === 'history' && (
                   <div className="space-y-4">
                     {testHistory.length === 0 ? (
                       <p className="text-text-muted text-center py-4">No test history yet</p>
                     ) : (
-                      testHistory.map((run, i) => (
+                      testHistory.map((run) => (
                         <div key={run.id} className={`glass rounded-xl p-4 ${run.status === 'pass' ? 'border-l-4 border-green-500' : run.status === 'fail' ? 'border-l-4 border-red-500' : 'border-l-4 border-yellow-500'}`}>
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
@@ -533,21 +558,16 @@ export default function ProjectPage() {
                             </span>
                           </div>
                           
-                          {run.stepResults && (
+                          {run.testData && (
                             <div className="text-sm text-text-muted mb-2">
-                              {(() => {
-                                try {
-                                  const results = JSON.parse(run.stepResults);
-                                  const passed = results.filter((r: any) => r.status === 'pass').length;
-                                  const failed = results.filter((r: any) => r.status === 'fail').length;
-                                  return `${passed}/${results.length} steps passed`;
-                                } catch {
-                                  return '';
-                                }
-                              })()}
+                              <span className="font-medium">Test Data:</span> {run.testData}
                             </div>
                           )}
-                          
+                          {run.actualResult && (
+                            <div className="text-sm text-text-secondary mt-2 p-2 bg-bg-primary/50 rounded">
+                              <span className="font-medium">Actual Result:</span> {run.actualResult}
+                            </div>
+                          )}
                           {run.notes && (
                             <div className="text-text-secondary text-sm mt-2 p-2 bg-bg-primary/50 rounded">
                               {run.notes}
@@ -567,26 +587,56 @@ export default function ProjectPage() {
       <Modal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setEditingTestCase(null); }} title={editingTestCase ? t('testCase.edit') : t('testCase.create')} size="lg">
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
-            <Input label={t('testCase.name')} value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} required />
-            <Textarea label={t('testCase.description')} value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={2} />
+            <Input 
+              label="Test Case Name" 
+              value={formData.title} 
+              onChange={(e) => setFormData({ ...formData, title: e.target.value })} 
+              required 
+            />
+            <Textarea 
+              label="Description" 
+              value={formData.description} 
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })} 
+              rows={2} 
+            />
             <div>
-              <label className="text-sm font-medium text-text-secondary mb-2 block">{t('testCase.parent')}</label>
-              <select value={formData.parentId || ''} onChange={(e) => setFormData({ ...formData, parentId: e.target.value || null })} className="glass-input w-full px-4 py-3 rounded-xl">
-                <option value="">{t('testCase.noParent')}</option>
-                {testCases.filter(tc => tc.id !== editingTestCase?.id).map(tc => (
-                  <option key={tc.id} value={tc.id}>{tc.title}</option>
-                ))}
+              <label className="text-sm font-medium text-text-secondary mb-2 block">Test Case Type</label>
+              <select 
+                value={formData.testCaseType || ''} 
+                onChange={(e) => setFormData({ ...formData, testCaseType: e.target.value || null })} 
+                className="glass-input w-full px-4 py-3 rounded-xl"
+              >
+                <option value="">Select Type</option>
+                <option value="Positive Case">Positive Case</option>
+                <option value="Negative Case">Negative Case</option>
               </select>
             </div>
+            <Textarea 
+              label="Test Data (Default)" 
+              value={formData.testData} 
+              onChange={(e) => setFormData({ ...formData, testData: e.target.value })} 
+              placeholder="Enter default test data - can be overridden during test run"
+              rows={2} 
+            />
+            <Textarea 
+              label="Expected Result" 
+              value={formData.expectedResult} 
+              onChange={(e) => setFormData({ ...formData, expectedResult: e.target.value })} 
+              rows={2} 
+            />
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-text-secondary">{t('testCase.steps')}</label>
-                <Button type="button" variant="ghost" size="sm" onClick={addStep}><Plus className="w-4 h-4 mr-1" />{t('testCase.addStep')}</Button>
+                <label className="text-sm font-medium text-text-secondary">Test Steps</label>
+                <Button type="button" variant="ghost" size="sm" onClick={addStep}><Plus className="w-4 h-4 mr-1" />Add Step</Button>
               </div>
               <div className="space-y-2">
                 {steps.map((step, i) => (
                   <div key={i} className="flex gap-2">
-                    <Input value={step.text} onChange={(e) => { const s = [...steps]; s[i].text = e.target.value; setSteps(s); }} placeholder={t('testCase.stepText')} />
+                    <Input 
+                      value={step.text} 
+                      onChange={(e) => { const s = [...steps]; s[i].text = e.target.value; setSteps(s); }} 
+                      placeholder={`Step ${i + 1}`} 
+                    />
                     <Button type="button" variant="danger" size="sm" onClick={() => removeStep(i)}>×</Button>
                   </div>
                 ))}

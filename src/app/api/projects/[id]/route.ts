@@ -21,7 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const testCases = await prisma.testCase.findMany({
       where: { projectId: id },
-      orderBy: { order: 'asc' },
+      orderBy: { createdAt: 'asc' },
     });
 
     return NextResponse.json({ ...project, testCases });

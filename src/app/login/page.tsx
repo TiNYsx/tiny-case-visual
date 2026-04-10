@@ -98,20 +98,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-grid bg-gradient-radial relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-grid bg-gradient-radial relative overflow-hidden p-4">
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-bg-primary pointer-events-none" />
       
-      <div className="relative z-10 text-center max-w-md mx-auto px-6">
-        <div className="mb-8">
-          <h1 className="text-5xl font-bold text-gradient mb-4">{t('app.name')}</h1>
-          <p className="text-text-secondary text-lg">{t('app.tagline')}</p>
+      <div className="relative z-10 text-center max-w-md w-full mx-auto">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gradient mb-2 sm:mb-4">{t('app.name')}</h1>
+          <p className="text-text-secondary text-sm sm:text-lg">{t('app.tagline')}</p>
         </div>
 
-        <div className="glass p-8 rounded-3xl">
-          <h2 className="text-2xl font-semibold mb-2">
+        <div className="glass p-5 sm:p-8 rounded-2xl sm:rounded-3xl">
+          <h2 className="text-xl sm:text-2xl font-semibold mb-2">
             {isRegister ? t('project.create') : t('auth.welcome')}
           </h2>
-          <p className="text-text-muted mb-8">
+          <p className="text-text-muted mb-6 sm:mb-8 text-sm">
             {isRegister ? t('auth.welcomeDesc') : t('auth.welcomeDesc')}
           </p>
 

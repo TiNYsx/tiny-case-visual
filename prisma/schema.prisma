@@ -59,23 +59,39 @@ model Project {
 }
 
 model TestCase {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  testCaseType    String?   // "Positive Case" or "Negative Case"
+  testData        String?   // Default test data (can be overridden at runtime)
+  expectedResult  String?   // Expected result (static)
+  positionX       Float?    // For free-form positioning
+  positionY       Float?
+  status          String    @default("pending")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  checkedAt       DateTime?
+  createdById     String
+  updatedById     String?
+  checkedById     String?
+  steps           TestCaseStep[]
+  comments        Comment[]
+  checks          TestCaseCheck[]
+  connectionsAsSource TestCaseConnection[] @relation("Source")
+  connectionsAsTarget TestCaseConnection[] @relation("Target")
+}
+
+model TestCaseConnection {
   id          String    @id @default(cuid())
-  projectId   String
-  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  title       String
-  description String?
-  parentId    String?
-  order       Int       @default(0)
-  status      String    @default("pending")
+  sourceId    String
+  source      TestCase  @relation("Source", fields: [sourceId], references: [id], onDelete: Cascade)
+  targetId    String
+  target      TestCase  @relation("Target", fields: [targetId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  checkedAt   DateTime?
-  createdById String
-  updatedById String?
-  checkedById String?
-  steps       TestCaseStep[]
-  comments    Comment[]
-  checks      TestCaseCheck[]
+
+  @@unique([sourceId, targetId])
 }
 
 model TestCaseStep {
@@ -90,16 +106,18 @@ model TestCaseStep {
 }
 
 model Comment {
-  id         String    @id @default(cuid())
-  testCaseId String
-  testCase   TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  text       String
-  type       String    @default("comment")
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  attachments Attachment[]
+  id               String    @id @default(cuid())
+  testCaseId       String?
+  testCase         TestCase? @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  testCaseCheckId  String?
+  testCaseCheck   TestCaseCheck? @relation(fields: [testCaseCheckId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text             String
+  type             String    @default("comment")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  attachments      Attachment[]
 }
 
 model Attachment {
@@ -113,13 +131,16 @@ model Attachment {
 }
 
 model TestCaseCheck {
-  id           String    @id @default(cuid())
-  testCaseId   String
-  testCase     TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
-  userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status       String
-  notes        String?   @db.Text
-  stepResults  Json?
-  checkedAt    DateTime  @default(now())
+  id             String    @id @default(cuid())
+  testCaseId     String
+  testCase       TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         String
+  notes          String?   @db.Text
+  testData       String?   // Test data used in this run (can be different from test case default)
+  actualResult   String?   // Actual result from this run
+  stepResults    Json?
+  checkedAt      DateTime  @default(now())
+  comments       Comment[]
 }
