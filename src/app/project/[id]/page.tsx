@@ -124,12 +124,12 @@ export default function ProjectPage() {
   };
 
   const handleAddNodeForNode = async (nodeId: string, position: 'left' | 'right') => {
-    // Find the current node position
-    const currentNode = nodes.find(n => n.id === nodeId);
-    if (!currentNode) return;
+    // Find the current test case position
+    const currentTc = testCases.find(tc => tc.id === nodeId);
+    if (!currentTc) return;
 
-    const offsetX = position === 'left' ? -250 : 250;
-    const newPosition = { x: currentNode.position.x + offsetX, y: currentNode.position.y };
+    const offsetX = position === 'left' ? -280 : 280;
+    const newPosition = { x: (currentTc.positionX ?? 0) + offsetX, y: currentTc.positionY ?? 0 };
 
     // Create new test case
     try {
@@ -185,8 +185,12 @@ export default function ProjectPage() {
           source: conn.sourceId,
           target: conn.targetId,
           type: 'smoothstep',
-          animated: false,
-          style: { stroke: 'rgba(255,255,255,0.2)' },
+          animated: true,
+          style: { 
+            stroke: 'rgba(99, 102, 241, 0.6)', 
+            strokeWidth: 2,
+            filter: 'drop-shadow(0 0 4px rgba(99, 102, 241, 0.3))'
+          },
         });
       });
     });
@@ -315,48 +319,6 @@ export default function ProjectPage() {
     }
   };
 
-  const handleStartConnect = (nodeId: string, x: number, y: number) => {
-    setConnectingFrom(nodeId);
-    setMousePos({ x, y });
-  };
-
-  const handleAddNodeForNode = async (nodeId: string, position: 'left' | 'right') => {
-    // Find the current node position
-    const currentNode = nodes.find(n => n.id === nodeId);
-    if (!currentNode) return;
-
-    const offsetX = position === 'left' ? -250 : 250;
-    const newPosition = { x: currentNode.position.x + offsetX, y: currentNode.position.y };
-
-    // Create new test case
-    try {
-      const res = await fetch('/api/testcases', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: 'New Test Case',
-          description: '',
-          projectId,
-          positionX: newPosition.x,
-          positionY: newPosition.y,
-          steps: [],
-        }),
-      });
-      if (res.ok) {
-        const newTc = await res.json();
-        // Connect if needed
-        if (position === 'right') {
-          await handleConnect(nodeId, newTc.id);
-        } else {
-          await handleConnect(newTc.id, nodeId);
-        }
-        fetchData();
-      }
-    } catch (error) {
-      console.error('Error creating node:', error);
-    }
-  };
-
   const handleMouseMove = useCallback((e: any) => {
     if (connectingFrom) {
       const bounds = reactFlowWrapperRef.current?.getBoundingClientRect();
@@ -448,8 +410,16 @@ export default function ProjectPage() {
             onPaneClick={handlePaneClick}
             onMouseMove={handleMouseMove}
             fitView
+            nodesDraggable={true}
+            nodesConnectable={false}
+            elementsSelectable={true}
             attributionPosition="bottom-left"
             nodeTypes={nodeTypes}
+            className="bg-transparent"
+            defaultEdgeOptions={{
+              animated: true,
+              style: { stroke: 'rgba(99, 102, 241, 0.6)', strokeWidth: 2 }
+            }}
           >
           </ReactFlow>
           
