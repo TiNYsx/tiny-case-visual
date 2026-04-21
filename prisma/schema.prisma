@@ -144,3 +144,14 @@ model TestCaseCheck {
   checkedAt      DateTime  @default(now())
   comments       Comment[]
 }
+
+model Document {
+  id          String    @id @default(cuid())
+  title       String
+  content     Json      // TipTap JSON structure
+  markdown    String    @db.Text
+  projectId   String?
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}

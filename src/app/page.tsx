@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { Plus, FolderOpen, Settings, LogOut, MoreVertical, Trash2, Edit2 } from 'lucide-react';
+import { Plus, FolderOpen, Settings, LogOut, MoreVertical, Trash2, Edit2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Modal } from '@/components/ui/Modal';
@@ -118,6 +118,9 @@ export default function DashboardPage() {
             <h1 className="text-xl font-bold text-gradient">{t('app.name')}</h1>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
+            <Button variant="ghost" size="sm" className="!p-2" onClick={() => router.push('/documents/new')}>
+              <FileText className="w-5 h-5" />
+            </Button>
             <Button variant="ghost" size="sm" className="!p-2" onClick={() => router.push('/settings')}>
               <Settings className="w-5 h-5" />
             </Button>
