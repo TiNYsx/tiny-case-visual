@@ -118,6 +118,48 @@ export default function ProjectPage() {
     }
   };
 
+  const handleStartConnect = (nodeId: string, x: number, y: number) => {
+    setConnectingFrom(nodeId);
+    setMousePos({ x, y });
+  };
+
+  const handleAddNodeForNode = async (nodeId: string, position: 'left' | 'right') => {
+    // Find the current node position
+    const currentNode = nodes.find(n => n.id === nodeId);
+    if (!currentNode) return;
+
+    const offsetX = position === 'left' ? -250 : 250;
+    const newPosition = { x: currentNode.position.x + offsetX, y: currentNode.position.y };
+
+    // Create new test case
+    try {
+      const res = await fetch('/api/testcases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: 'New Test Case',
+          description: '',
+          projectId,
+          positionX: newPosition.x,
+          positionY: newPosition.y,
+          steps: [],
+        }),
+      });
+      if (res.ok) {
+        const newTc = await res.json();
+        // Connect if needed
+        if (position === 'right') {
+          await handleConnect(nodeId, newTc.id);
+        } else {
+          await handleConnect(newTc.id, nodeId);
+        }
+        fetchData();
+      }
+    } catch (error) {
+      console.error('Error creating node:', error);
+    }
+  };
+
   const nodes = useMemo(() => {
     return testCases.map(tc => ({
       id: tc.id,
@@ -125,7 +167,12 @@ export default function ProjectPage() {
         x: tc.positionX ?? 100 + Math.random() * 500, 
         y: tc.positionY ?? 100 + Math.random() * 300 
       },
-      data: tc,
+      data: {
+        ...tc,
+        onStartConnect: handleStartConnect,
+        onAddNode: handleAddNodeForNode,
+      },
+      type: 'custom',
     }));
   }, [testCases]);
 
@@ -271,6 +318,43 @@ export default function ProjectPage() {
   const handleStartConnect = (nodeId: string, x: number, y: number) => {
     setConnectingFrom(nodeId);
     setMousePos({ x, y });
+  };
+
+  const handleAddNodeForNode = async (nodeId: string, position: 'left' | 'right') => {
+    // Find the current node position
+    const currentNode = nodes.find(n => n.id === nodeId);
+    if (!currentNode) return;
+
+    const offsetX = position === 'left' ? -250 : 250;
+    const newPosition = { x: currentNode.position.x + offsetX, y: currentNode.position.y };
+
+    // Create new test case
+    try {
+      const res = await fetch('/api/testcases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: 'New Test Case',
+          description: '',
+          projectId,
+          positionX: newPosition.x,
+          positionY: newPosition.y,
+          steps: [],
+        }),
+      });
+      if (res.ok) {
+        const newTc = await res.json();
+        // Connect if needed
+        if (position === 'right') {
+          await handleConnect(nodeId, newTc.id);
+        } else {
+          await handleConnect(newTc.id, nodeId);
+        }
+        fetchData();
+      }
+    } catch (error) {
+      console.error('Error creating node:', error);
+    }
   };
 
   const handleMouseMove = useCallback((e: any) => {
