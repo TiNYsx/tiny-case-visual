@@ -1,4 +1,4 @@
-import { useEditor, EditorContent } from '@tiptap/react';
+import { Content, Editor, useEditor, EditorContent } from '@tiptap/react';
 import { BubbleMenu, FloatingMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -30,7 +30,6 @@ import {
   Table as TableIcon,
   Minus,
   Type,
-  ChevronDown,
   Check,
   Cloud,
   CloudOff,
@@ -41,7 +40,7 @@ import {
 } from 'lucide-react';
 import { slashCommands } from '@/lib/editor/slash-commands';
 import { CustomMention } from '@/lib/editor/mention-extension';
-import { generateMarkdown } from '@/lib/editor/markdown-parser';
+import { generateMarkdown, MarkdownNode } from '@/lib/editor/markdown-parser';
 import { toast } from 'sonner';
 
 const lowlight = createLowlight();
@@ -50,17 +49,37 @@ lowlight.register('css', css);
 lowlight.register('js', js);
 lowlight.register('ts', ts);
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+type MinimalEditorForMenus = {
+  state: {
+    selection: {
+      $from: {
+        parent: { textBetween: (from: number, to: number, separator: string | null, leafText: string) => string };
+        parentOffset: number;
+        pos: number;
+      };
+    };
+  };
+  view: { coordsAtPos: (position: number) => { bottom: number; left: number } };
+};
+
+const emptyDocument: Content = {
+  type: 'doc',
+  content: [{ type: 'paragraph' }],
+};
+
 interface Document {
   id: string;
   title: string;
-  content: any;
+  content: JsonValue;
   markdown?: string;
   updatedAt: string;
 }
 
 interface BlockBasedEditorProps {
   document?: Document;
-  onSave?: (doc: { title: string; content: any; markdown: string }) => Promise<void>;
+  onSave?: (doc: { title: string; content: JsonValue; markdown: string }) => Promise<void>;
   mentionItems?: Array<{ id: string; label: string } >;
 }
 
@@ -149,14 +168,7 @@ export default function BlockBasedEditor({
         },
       }),
     ],
-    content: document?.content || {
-      type: 'doc',
-      content: [
-        {
-          type: 'paragraph',
-        },
-      ],
-    },
+    content: (document?.content as Content | undefined) || emptyDocument,
     onUpdate: ({ editor }) => {
       handleContentChange();
       handleSlashMenu(editor);
@@ -190,7 +202,7 @@ export default function BlockBasedEditor({
               const { from, to } = selection;
               const tr = state.tr.deleteRange(from - slashQuery.length - 1, to);
               view.dispatch(tr);
-              cmd.command({ editor: view, range: { from: from - slashQuery.length - 1, to } });
+              cmd.command({ editor: editor as Editor, range: { from: from - slashQuery.length - 1, to } });
               setShowSlashMenu(false);
               setSlashQuery('');
             }
@@ -240,6 +252,19 @@ export default function BlockBasedEditor({
     },
   });
 
+  const handleAutoSave = useCallback(async () => {
+    if (!editor || !onSave) return;
+    setSaveStatus('saving');
+    try {
+      const json = editor.getJSON() as MarkdownNode;
+      const markdown = generateMarkdown(json);
+      await onSave({ title, content: json as unknown as JsonValue, markdown });
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('error');
+    }
+  }, [editor, onSave, title]);
+
   const handleContentChange = useCallback(() => {
     setSaveStatus('unsaved');
     if (saveTimeoutRef.current) {
@@ -248,23 +273,10 @@ export default function BlockBasedEditor({
     saveTimeoutRef.current = setTimeout(() => {
       handleAutoSave();
     }, 2000);
-  }, []);
-
-  const handleAutoSave = useCallback(async () => {
-    if (!editor || !onSave) return;
-    setSaveStatus('saving');
-    try {
-      const json = editor.getJSON();
-      const markdown = generateMarkdown(json);
-      await onSave({ title, content: json, markdown });
-      setSaveStatus('saved');
-    } catch (error) {
-      setSaveStatus('error');
-    }
-  }, [editor, onSave, title]);
+  }, [handleAutoSave]);
 
   const handleSlashMenu = useCallback(
-    (editorInstance: any) => {
+    (editorInstance: MinimalEditorForMenus) => {
       const { selection } = editorInstance.state;
       const { $from } = selection;
       const textBefore = $from.parent.textBetween(
@@ -293,7 +305,7 @@ export default function BlockBasedEditor({
   );
 
   const handleMentionMenu = useCallback(
-    (editorInstance: any) => {
+    (editorInstance: MinimalEditorForMenus) => {
       const { selection } = editorInstance.state;
       const { $from } = selection;
       const textBefore = $from.parent.textBetween(

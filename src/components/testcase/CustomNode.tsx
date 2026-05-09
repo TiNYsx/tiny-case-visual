@@ -77,7 +77,7 @@ export function CustomNode({ data, selected }: NodeProps<CustomNodeData>) {
 
   return (
     <motion.div
-      className={`w-[240px] glass rounded-2xl p-4 ${selected ? 'ring-2 ring-accent ring-opacity-50' : ''} ${colors.border} border transition-all duration-300 cursor-pointer`}
+      className={`relative w-[240px] glass rounded-2xl p-4 ${selected ? 'ring-2 ring-accent ring-opacity-50' : ''} ${colors.border} border transition-all duration-300 cursor-pointer`}
       style={{
         boxShadow: selected ? `0 0 20px rgba(99, 102, 241, 0.4)` : '0 4px 20px rgba(0, 0, 0, 0.3)'
       }}
@@ -159,7 +159,7 @@ export function CustomNode({ data, selected }: NodeProps<CustomNodeData>) {
       >
         <motion.button
           onClick={(e) => handleAddClick(e, 'left')}
-          className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center hover:bg-accent-hover transition-all duration-200 shadow-lg hover:shadow-xl"
+          className="nodrag w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center hover:bg-accent-hover transition-all duration-200 shadow-lg hover:shadow-xl"
           whileHover={{ scale: 1.1, rotate: 90 }}
           whileTap={{ scale: 0.9 }}
         >
@@ -174,7 +174,7 @@ export function CustomNode({ data, selected }: NodeProps<CustomNodeData>) {
       >
         <motion.button
           onClick={(e) => handleAddClick(e, 'right')}
-          className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center hover:bg-accent-hover transition-all duration-200 shadow-lg hover:shadow-xl"
+          className="nodrag w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center hover:bg-accent-hover transition-all duration-200 shadow-lg hover:shadow-xl"
           whileHover={{ scale: 1.1, rotate: 90 }}
           whileTap={{ scale: 0.9 }}
         >

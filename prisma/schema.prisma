@@ -7,19 +7,41 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ProjectRole {
+  owner
+  manager
+  member
+}
+
+enum TestSessionStatus {
+  running
+  completed
+  stopped
+}
+
+enum StepResultStatus {
+  pending
+  pass
+  fail
+}
+
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  password      String?
-  name          String?
-  image         String?
-  emailVerified DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  accounts      Account[]
-  sessions      Session[]
-  comments      Comment[]
-  testCases     TestCaseCheck[]
+  id                    String                  @id @default(cuid())
+  email                 String                  @unique
+  password              String?
+  name                  String?
+  image                 String?
+  emailVerified         DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  accounts              Account[]
+  sessions              Session[]
+  comments              Comment[]
+  testCases             TestCaseCheck[]
+  projectMemberships    ProjectMember[]
+  activeTestSessions    TestSession[]           @relation("TesterSessions")
+  stoppedTestSessions   TestSession[]           @relation("StoppedSessions")
+  testSessionStepResults TestSessionStepResult[]
 }
 
 model Account {
@@ -49,109 +71,189 @@ model Session {
 }
 
 model Project {
-  id          String     @id @default(cuid())
-  name        String
-  description String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  createdById String
-  testCases   TestCase[]
+  id            String          @id @default(cuid())
+  name          String
+  description   String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  createdById   String
+  testCases     TestCase[]
+  members       ProjectMember[]
+  templateSteps TemplateStep[]
+  testSessions  TestSession[]
+}
+
+model ProjectMember {
+  id        String      @id @default(cuid())
+  projectId String
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      ProjectRole @default(member)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+model TemplateStep {
+  id          String      @id @default(cuid())
+  projectId   String
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  instruction String      @db.Text
+  expected    String?     @db.Text
+  order       Int         @default(0)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  results     TestSessionStepResult[]
+}
+
+model TestSession {
+  id          String            @id @default(cuid())
+  projectId   String
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  testerId    String
+  tester      User              @relation("TesterSessions", fields: [testerId], references: [id], onDelete: Cascade)
+  status      TestSessionStatus @default(running)
+  title       String?
+  notes       String?           @db.Text
+  startedAt   DateTime          @default(now())
+  endedAt     DateTime?
+  stoppedById String?
+  stoppedBy   User?             @relation("StoppedSessions", fields: [stoppedById], references: [id])
+  stepResults TestSessionStepResult[]
+
+  @@index([projectId, status])
+}
+
+model TestSessionStepResult {
+  id               String           @id @default(cuid())
+  sessionId        String
+  session          TestSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  templateStepId   String
+  templateStep     TemplateStep     @relation(fields: [templateStepId], references: [id], onDelete: Restrict)
+  userId           String
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status           StepResultStatus @default(pending)
+  notes            String?          @db.Text
+  actualResult     String?          @db.Text
+  changedDetails   String?          @db.Text
+  order            Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  evidence         TestRunEvidence[]
+
+  @@unique([sessionId, templateStepId])
+  @@index([templateStepId])
+}
+
+model TestRunEvidence {
+  id           String                @id @default(cuid())
+  stepResultId String
+  stepResult   TestSessionStepResult @relation(fields: [stepResultId], references: [id], onDelete: Cascade)
+  name         String
+  url          String
+  type         String
+  size         Int?
+  createdAt    DateTime              @default(now())
 }
 
 model TestCase {
-  id              String    @id @default(cuid())
-  projectId       String
-  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  title           String
-  description     String?
-  testCaseType    String?   // "Positive Case" or "Negative Case"
-  testData        String?   // Default test data (can be overridden at runtime)
-  expectedResult  String?   // Expected result (static)
-  positionX       Float?    // For free-form positioning
-  positionY       Float?
-  status          String    @default("pending")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  checkedAt       DateTime?
-  createdById     String
-  updatedById     String?
-  checkedById     String?
-  steps           TestCaseStep[]
-  comments        Comment[]
-  checks          TestCaseCheck[]
+  id                  String               @id @default(cuid())
+  projectId           String
+  project             Project              @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title               String
+  description         String?
+  testCaseType        String?
+  testData            String?
+  expectedResult      String?
+  positionX           Float?
+  positionY           Float?
+  status              String               @default("pending")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  checkedAt           DateTime?
+  createdById         String
+  updatedById         String?
+  checkedById         String?
+  steps               TestCaseStep[]
+  comments            Comment[]
+  checks              TestCaseCheck[]
   connectionsAsSource TestCaseConnection[] @relation("Source")
   connectionsAsTarget TestCaseConnection[] @relation("Target")
 }
 
 model TestCaseConnection {
-  id          String    @id @default(cuid())
-  sourceId    String
-  source      TestCase  @relation("Source", fields: [sourceId], references: [id], onDelete: Cascade)
-  targetId    String
-  target      TestCase  @relation("Target", fields: [targetId], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now())
+  id        String   @id @default(cuid())
+  sourceId  String
+  source    TestCase @relation("Source", fields: [sourceId], references: [id], onDelete: Cascade)
+  targetId  String
+  target    TestCase @relation("Target", fields: [targetId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
 
   @@unique([sourceId, targetId])
 }
 
 model TestCaseStep {
-  id         String    @id @default(cuid())
+  id         String   @id @default(cuid())
   testCaseId String
-  testCase   TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  testCase   TestCase @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
   text       String
   imageUrl   String?
-  order      Int       @default(0)
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 }
 
 model Comment {
-  id               String    @id @default(cuid())
-  testCaseId       String?
-  testCase         TestCase? @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
-  testCaseCheckId  String?
+  id              String         @id @default(cuid())
+  testCaseId      String?
+  testCase        TestCase?      @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  testCaseCheckId String?
   testCaseCheck   TestCaseCheck? @relation(fields: [testCaseCheckId], references: [id], onDelete: Cascade)
-  userId           String
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  text             String
-  type             String    @default("comment")
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  attachments      Attachment[]
+  userId          String
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text            String
+  type            String         @default("comment")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  attachments     Attachment[]
 }
 
 model Attachment {
-  id         String   @id @default(cuid())
-  commentId  String
-  comment    Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
-  name       String
-  url        String
-  type       String
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  commentId String
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  name      String
+  url       String
+  type      String
+  createdAt DateTime @default(now())
 }
 
 model TestCaseCheck {
-  id             String    @id @default(cuid())
-  testCaseId     String
-  testCase       TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
-  userId         String
-  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status         String
-  notes          String?   @db.Text
-  testData       String?   // Test data used in this run (can be different from test case default)
-  actualResult   String?   // Actual result from this run
-  stepResults    Json?
-  checkedAt      DateTime  @default(now())
-  comments       Comment[]
+  id           String    @id @default(cuid())
+  testCaseId   String
+  testCase     TestCase  @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status       String
+  notes        String?   @db.Text
+  testData     String?
+  actualResult String?
+  stepResults  Json?
+  checkedAt    DateTime  @default(now())
+  comments     Comment[]
 }
 
 model Document {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   title       String
-  content     Json      // TipTap JSON structure
-  markdown    String    @db.Text
+  content     Json
+  markdown    String   @db.Text
   projectId   String?
   createdById String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

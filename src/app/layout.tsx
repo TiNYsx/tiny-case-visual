@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Prompt, Inter } from "next/font/google";
+import "reactflow/dist/style.css";
 import "./globals.css";
 import "@/lib/i18n";
 import { Providers } from "./providers";

@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { ensureProjectMembership, getRunningSession } from '@/lib/permissions';
+import { publishProjectEvent } from '@/lib/project-events';
+
+async function getTestCaseWithAccess(testCaseId: string, userId: string) {
+  const testCase = await prisma.testCase.findUnique({
+    where: { id: testCaseId },
+    include: {
+      steps: { orderBy: { order: 'asc' } },
+      connectionsAsSource: true,
+      connectionsAsTarget: true,
+      _count: { select: { comments: true } },
+    },
+  });
+
+  if (!testCase) return null;
+  const access = await ensureProjectMembership(testCase.projectId, userId);
+  if (!access) return null;
+  return { testCase, access };
+}
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -11,21 +30,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const testCase = await prisma.testCase.findUnique({
-      where: { id },
-      include: {
-        steps: { orderBy: { order: 'asc' } },
-        connectionsAsSource: true,
-        connectionsAsTarget: true,
-        _count: { select: { comments: true } },
-      },
-    });
-
-    if (!testCase) {
+    const result = await getTestCaseWithAccess(id, session.user.id);
+    if (!result) {
       return NextResponse.json({ error: 'Test case not found' }, { status: 404 });
     }
 
-    return NextResponse.json(testCase);
+    return NextResponse.json(result.testCase);
   } catch (error) {
     console.error('Error fetching test case:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -40,8 +50,18 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
+    const result = await getTestCaseWithAccess(id, session.user.id);
+    if (!result) {
+      return NextResponse.json({ error: 'Test case not found' }, { status: 404 });
+    }
+
+    const runningSession = await getRunningSession(result.testCase.projectId);
+    if (runningSession) {
+      return NextResponse.json({ error: 'Project is locked while a test is running', runningSession }, { status: 409 });
+    }
+
     const body = await request.json();
-    const { title, description, testCaseType, testData, expectedResult, positionX, positionY, steps, connections } = body;
+    const { title, description, testCaseType, testData, expectedResult, positionX, positionY, status, steps, connections } = body;
 
     const testCase = await prisma.testCase.update({
       where: { id },
@@ -53,25 +73,26 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         expectedResult,
         positionX,
         positionY,
+        status,
         updatedById: session.user.id,
       },
     });
 
-    if (steps !== undefined) {
+    if (steps) {
       await prisma.testCaseStep.deleteMany({ where: { testCaseId: id } });
       if (steps.length > 0) {
         await prisma.testCaseStep.createMany({
-          data: steps.map((s: { text: string; imageUrl?: string }, i: number) => ({
+          data: steps.map((step: { text: string; imageUrl?: string }, index: number) => ({
             testCaseId: id,
-            text: s.text,
-            imageUrl: s.imageUrl,
-            order: i,
+            text: step.text,
+            imageUrl: step.imageUrl,
+            order: index,
           })),
         });
       }
     }
 
-    if (connections !== undefined) {
+    if (connections) {
       await prisma.testCaseConnection.deleteMany({ where: { sourceId: id } });
       if (connections.length > 0) {
         await prisma.testCaseConnection.createMany({
@@ -79,12 +100,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
             sourceId: id,
             targetId: conn.targetId,
           })),
+          skipDuplicates: true,
         });
       }
     }
 
     const fullTestCase = await prisma.testCase.findUnique({
-      where: { id },
+      where: { id: testCase.id },
       include: {
         steps: { orderBy: { order: 'asc' } },
         connectionsAsSource: true,
@@ -93,6 +115,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       },
     });
 
+    publishProjectEvent(result.testCase.projectId, 'testcase.updated', { testCaseId: id });
     return NextResponse.json(fullTestCase);
   } catch (error) {
     console.error('Error updating test case:', error);
@@ -108,12 +131,18 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     }
 
     const { id } = await params;
-    await prisma.testCaseConnection.deleteMany({ 
-      where: { OR: [{ sourceId: id }, { targetId: id }] } 
-    });
-    await prisma.testCaseStep.deleteMany({ where: { testCaseId: id } });
-    await prisma.comment.deleteMany({ where: { testCaseId: id } });
+    const result = await getTestCaseWithAccess(id, session.user.id);
+    if (!result) {
+      return NextResponse.json({ error: 'Test case not found' }, { status: 404 });
+    }
+
+    const runningSession = await getRunningSession(result.testCase.projectId);
+    if (runningSession) {
+      return NextResponse.json({ error: 'Project is locked while a test is running', runningSession }, { status: 409 });
+    }
+
     await prisma.testCase.delete({ where: { id } });
+    publishProjectEvent(result.testCase.projectId, 'testcase.deleted', { testCaseId: id });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Error deleting test case:', error);

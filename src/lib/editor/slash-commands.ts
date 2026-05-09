@@ -1,3 +1,4 @@
+import { Editor } from '@tiptap/core';
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
@@ -5,7 +6,7 @@ export interface SlashCommandItem {
   title: string;
   description: string;
   icon: string;
-  command: (props: { editor: any; range: any }) => void;
+  command: (props: { editor: Editor; range: { from: number; to: number } }) => void;
 }
 
 export const SlashCommands = Extension.create({

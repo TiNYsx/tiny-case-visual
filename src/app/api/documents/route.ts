@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
     const projectId = searchParams.get('projectId');
     const search = searchParams.get('search');
 
-    const where: any = {};
+    const where: Prisma.DocumentWhereInput = {};
     if (projectId) where.projectId = projectId;
     if (search) {
       where.OR = [

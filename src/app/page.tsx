@@ -17,7 +17,7 @@ interface Project {
   createdAt: string;
   updatedAt: string;
   createdById: string;
-  _count?: { testCases: number };
+  _count?: { testCases: number; templateSteps?: number; testSessions?: number };
 }
 
 export default function DashboardPage() {
@@ -206,7 +206,7 @@ export default function DashboardPage() {
                   {project.description || '-'}
                 </p>
                 <div className="flex items-center justify-between text-sm text-text-muted">
-                  <span className="truncate">{project._count?.testCases || 0} {t('project.testCases')}</span>
+                  <span className="truncate">{project._count?.testCases || 0} test cases · {project._count?.templateSteps || 0} template steps</span>
                   <span className="whitespace-nowrap text-xs">{new Date(project.updatedAt).toLocaleDateString('th-TH')}</span>
                 </div>
               </motion.div>

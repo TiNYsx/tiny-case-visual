@@ -1,23 +1,12 @@
-interface MarkdownNode {
+export interface MarkdownNode {
   type: string;
-  attrs?: Record<string, any>;
+  attrs?: Record<string, unknown>;
   content?: MarkdownNode[];
   text?: string;
-  marks?: Array<{ type: string; attrs?: Record<string, any> }>;
+  marks?: Array<{ type: string; attrs?: Record<string, unknown> }>;
 }
 
-function escapeMarkdown(text: string): string {
-  return text
-    .replace(/\\/g, '\\\\')
-    .replace(/\*/g, '\\*')
-    .replace(/_/g, '\\_')
-    .replace(/\[/g, '\\[')
-    .replace(/\]/g, '\\]')
-    .replace(/</g, '\\<')
-    .replace(/>/g, '\\>');
-}
-
-function processMarks(text: string, marks?: Array<{ type: string; attrs?: Record<string, any> }>): string {
+function processMarks(text: string, marks?: Array<{ type: string; attrs?: Record<string, unknown> }>): string {
   if (!marks || marks.length === 0) return text;
 
   let result = text;
@@ -91,7 +80,8 @@ function processBlock(node: MarkdownNode, depth: number = 0): string {
       return indent + processInlineContent(node.content);
 
     case 'heading': {
-      const level = node.attrs?.level || 1;
+      const rawLevel = node.attrs?.level;
+      const level = typeof rawLevel === 'number' ? rawLevel : 1;
       const hashes = '#'.repeat(level);
       return `${hashes} ${processInlineContent(node.content)}`;
     }
@@ -131,7 +121,8 @@ function processBlock(node: MarkdownNode, depth: number = 0): string {
     }
 
     case 'codeBlock': {
-      const language = node.attrs?.language || '';
+      const rawLanguage = node.attrs?.language;
+      const language = typeof rawLanguage === 'string' ? rawLanguage : '';
       const code = processInlineContent(node.content);
       return `\`\`\`${language}\n${code}\n\`\`\``;
     }

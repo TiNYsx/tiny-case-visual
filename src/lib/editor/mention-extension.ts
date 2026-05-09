@@ -1,9 +1,9 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 
 export interface MentionOptions {
-  HTMLAttributes: Record<string, any>;
-  renderLabel: (props: { options: MentionOptions; node: any }) => string;
-  suggestion: any;
+  HTMLAttributes: Record<string, unknown>;
+  renderLabel: (props: { options: MentionOptions; node: { attrs: { label?: string; id?: string } } }) => string;
+  suggestion: { char?: string } & Record<string, unknown>;
 }
 
 export const CustomMention = Node.create<MentionOptions>({

@@ -6,10 +6,12 @@ import BlockBasedEditor from '@/components/editor/BlockBasedEditor';
 import { Loader2, ArrowLeft, FileText, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
 interface Document {
   id: string;
   title: string;
-  content: any;
+  content: JsonValue;
   markdown?: string;
   updatedAt: string;
 }
@@ -84,7 +86,7 @@ export default function DocumentPage() {
   };
 
   const handleSave = useCallback(
-    async (docData: { title: string; content: any; markdown: string }) => {
+    async (docData: { title: string; content: JsonValue; markdown: string }) => {
       try {
         if (isNew || !documentId) {
           // Create new document

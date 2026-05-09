@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { ensureProjectMembership } from '@/lib/permissions';
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,19 +18,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Test Case ID is required' }, { status: 400 });
     }
 
+    const testCase = await prisma.testCase.findUnique({
+      where: { id: testCaseId },
+      select: { projectId: true },
+    });
+
+    if (!testCase) {
+      return NextResponse.json({ error: 'Test case not found' }, { status: 404 });
+    }
+
+    const access = await ensureProjectMembership(testCase.projectId, session.user.id);
+    if (!access) {
+      return NextResponse.json({ error: 'Test case not found' }, { status: 404 });
+    }
+
     const testRuns = await prisma.testCaseCheck.findMany({
       where: { testCaseId },
       orderBy: { checkedAt: 'desc' },
       include: {
-        user: {
-          select: { id: true, name: true, image: true },
-        },
+        user: { select: { id: true, name: true, image: true } },
         comments: {
           include: {
             attachments: true,
-            user: {
-              select: { id: true, name: true, image: true },
-            },
+            user: { select: { id: true, name: true, image: true } },
           },
         },
       },
@@ -56,24 +67,48 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Test Case ID and status are required' }, { status: 400 });
     }
 
-    const testRun = await prisma.testCaseCheck.create({
-      data: {
-        testCaseId,
-        userId: session.user.id,
-        status,
-        stepResults,
-        notes,
-        testData,
-        actualResult,
-      },
+    const testCase = await prisma.testCase.findUnique({
+      where: { id: testCaseId },
+      select: { projectId: true },
     });
 
-    if (testCaseType) {
-      await prisma.testCase.update({
-        where: { id: testCaseId },
-        data: { testCaseType },
-      });
+    if (!testCase) {
+      return NextResponse.json({ error: 'Test case not found' }, { status: 404 });
     }
+
+    const access = await ensureProjectMembership(testCase.projectId, session.user.id);
+    if (!access) {
+      return NextResponse.json({ error: 'Test case not found' }, { status: 404 });
+    }
+
+    const testRun = await prisma.$transaction(async (tx) => {
+      const created = await tx.testCaseCheck.create({
+        data: {
+          testCaseId,
+          userId: session.user.id,
+          status,
+          stepResults: stepResults || undefined,
+          notes,
+          testData,
+          actualResult,
+        },
+        include: {
+          user: { select: { id: true, name: true, image: true } },
+        },
+      });
+
+      await tx.testCase.update({
+        where: { id: testCaseId },
+        data: {
+          status,
+          checkedAt: new Date(),
+          checkedById: session.user.id,
+          testCaseType,
+        },
+      });
+
+      return created;
+    });
 
     return NextResponse.json(testRun);
   } catch (error) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { publishProjectEvent } from '@/lib/project-events';
 import prisma from '@/lib/prisma';
 
 export async function GET() {
@@ -11,10 +12,20 @@ export async function GET() {
     }
 
     const projects = await prisma.project.findMany({
+      where: {
+        OR: [
+          { createdById: session.user.id },
+          { members: { some: { userId: session.user.id } } },
+        ],
+      },
       orderBy: { updatedAt: 'desc' },
       include: {
+        members: {
+          where: { userId: session.user.id },
+          select: { role: true },
+        },
         _count: {
-          select: { testCases: true },
+          select: { testCases: true, templateSteps: true, testSessions: true },
         },
       },
     });
@@ -45,8 +56,25 @@ export async function POST(request: NextRequest) {
         name,
         description,
         createdById: session.user.id,
+        members: {
+          create: {
+            userId: session.user.id,
+            role: 'owner',
+          },
+        },
+      },
+      include: {
+        members: {
+          where: { userId: session.user.id },
+          select: { role: true },
+        },
+        _count: {
+          select: { testCases: true, templateSteps: true, testSessions: true },
+        },
       },
     });
+
+    publishProjectEvent(project.id, 'project.created', { projectId: project.id });
 
     return NextResponse.json(project);
   } catch (error) {

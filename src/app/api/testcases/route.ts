@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { ensureProjectMembership, getRunningSession } from '@/lib/permissions';
+import { publishProjectEvent } from '@/lib/project-events';
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,6 +17,11 @@ export async function GET(request: NextRequest) {
 
     if (!projectId) {
       return NextResponse.json({ error: 'Project ID is required' }, { status: 400 });
+    }
+
+    const access = await ensureProjectMembership(projectId, session.user.id);
+    if (!access) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
     }
 
     const testCases = await prisma.testCase.findMany({
@@ -46,6 +53,16 @@ export async function POST(request: NextRequest) {
 
     if (!projectId || !title) {
       return NextResponse.json({ error: 'Project ID and title are required' }, { status: 400 });
+    }
+
+    const access = await ensureProjectMembership(projectId, session.user.id);
+    if (!access) {
+      return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+    }
+
+    const runningSession = await getRunningSession(projectId);
+    if (runningSession) {
+      return NextResponse.json({ error: 'Project is locked while a test is running', runningSession }, { status: 409 });
     }
 
     const testCase = await prisma.testCase.create({
@@ -80,6 +97,7 @@ export async function POST(request: NextRequest) {
           sourceId: testCase.id,
           targetId: conn.targetId,
         })),
+        skipDuplicates: true,
       });
     }
 
@@ -93,6 +111,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    publishProjectEvent(projectId, 'testcase.created', { testCaseId: testCase.id });
     return NextResponse.json(fullTestCase);
   } catch (error) {
     console.error('Error creating test case:', error);
