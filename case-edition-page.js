@@ -13,15 +13,15 @@ const CaseEditionPage = () => {
   };
 
   return (
-    <div style={{ height: '80vh', overflowY: 'auto' }}>
+    <div style={{ height: '100vh', overflowY: 'auto' }}>
       <DragDropContext onDragEnd={handleDragEnd}>
         <Droppable droppableId="cases">
           {(provided) => (
-            <div ref={provided.innerRef} {...provided.droppableProps} style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+            <div ref={provided.innerRef} {...provided.droppableProps} style={{ maxHeight: '100vh', overflowY: 'auto' }}>
               {cases.map((caseItem, index) => (
                 <Draggable key={caseItem.id} draggableId={caseItem.id} index={index}>
                   {(provided) => (
-                    <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps}>
+                    <div ref={provided.innerRef} {...provided.draggableProps} {...provided.dragHandleProps} style={{ maxHeight: '100vh', overflowY: 'auto' }}>
                       <CaseItem case={caseItem} />
                     </div>
                   )}
