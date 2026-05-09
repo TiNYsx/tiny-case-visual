@@ -113,7 +113,7 @@ export default function ProjectPage() {
   const [editingTestCase, setEditingTestCase] = useState<TestCase | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
-  const [formData, setFormData] = useState({ title: '', description: '', testCaseType: '' as string | null, testData: '', expectedResult: '' });
+  const [formData, setFormData] = useState({ title: '', description: '', testCaseType: '' as string | null, testData: '', expectedResult: '', connections: [] as string[] });
   const [steps, setSteps] = useState<{ text: string; imageUrl: string }[]>([]);
   const [templateStep, setTemplateStep] = useState({ title: '', instruction: '', expected: '' });
   const [submitting, setSubmitting] = useState(false);
@@ -258,8 +258,7 @@ export default function ProjectPage() {
     try {
       const url = editingTestCase ? `/api/testcases/${editingTestCase.id}` : '/api/testcases';
       const method = editingTestCase ? 'PUT' : 'POST';
-      const body: SaveTestCaseBody = { ...formData, projectId, steps };
-      if (editingTestCase) body.connections = editingTestCase.connectionsAsSource.map(c => ({ targetId: c.targetId }));
+      const body: SaveTestCaseBody = { ...formData, projectId, steps, connections: formData.connections.map(targetId => ({ targetId })) };
 
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (!res.ok) {
@@ -270,7 +269,7 @@ export default function ProjectPage() {
 
       setIsModalOpen(false);
       setEditingTestCase(null);
-      setFormData({ title: '', description: '', testCaseType: null, testData: '', expectedResult: '' });
+      setFormData({ title: '', description: '', testCaseType: null, testData: '', expectedResult: '', connections: [] });
       setSteps([]);
       fetchData();
     } finally {
@@ -310,7 +309,7 @@ export default function ProjectPage() {
 
   const openEditModal = (tc: TestCase) => {
     setEditingTestCase(tc);
-    setFormData({ title: tc.title, description: tc.description || '', testCaseType: tc.testCaseType, testData: tc.testData || '', expectedResult: tc.expectedResult || '' });
+    setFormData({ title: tc.title, description: tc.description || '', testCaseType: tc.testCaseType, testData: tc.testData || '', expectedResult: tc.expectedResult || '', connections: tc.connectionsAsSource?.map(c => c.targetId) || [] });
     setSteps(tc.steps ? tc.steps.map(s => ({ text: s.text, imageUrl: s.imageUrl || '' })) : []);
     setIsModalOpen(true);
   };
@@ -331,7 +330,7 @@ export default function ProjectPage() {
   const handleAddNode = () => {
     if (isLocked) return;
     setEditingTestCase(null);
-    setFormData({ title: '', description: '', testCaseType: null, testData: '', expectedResult: '' });
+    setFormData({ title: '', description: '', testCaseType: null, testData: '', expectedResult: '', connections: [] });
     setSteps([]);
     setIsModalOpen(true);
   };
@@ -469,6 +468,32 @@ export default function ProjectPage() {
             <div>
               <div className="flex items-center justify-between mb-2"><label className="text-sm font-medium text-text-secondary">Test Steps</label><Button type="button" variant="ghost" size="sm" onClick={addStep}><Plus className="w-4 h-4 mr-1" />Add Step</Button></div>
               <div className="space-y-3">{steps.map((step, i) => <div key={i} className="flex gap-2 items-start"><div className="flex-1"><MarkdownEditor value={step.text} onChange={(value) => { const next = [...steps]; next[i].text = value; setSteps(next); }} placeholder={`Step ${i + 1}`} rows={2} /></div><Button type="button" variant="danger" size="sm" onClick={() => removeStep(i)}>×</Button></div>)}</div>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-text-secondary mb-2 block">Connect To</label>
+              <div className="glass-input rounded-xl p-3 max-h-40 overflow-y-auto space-y-2">
+                {testCases.filter(tc => tc.id !== editingTestCase?.id).length === 0 ? (
+                  <p className="text-text-muted text-sm">No other test cases available</p>
+                ) : (
+                  testCases.filter(tc => tc.id !== editingTestCase?.id).map(tc => (
+                    <label key={tc.id} className="flex items-center gap-2 cursor-pointer hover:bg-bg-secondary/50 p-1 rounded">
+                      <input
+                        type="checkbox"
+                        checked={formData.connections.includes(tc.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setFormData({ ...formData, connections: [...formData.connections, tc.id] });
+                          } else {
+                            setFormData({ ...formData, connections: formData.connections.filter(id => id !== tc.id) });
+                          }
+                        }}
+                        className="rounded accent-accent"
+                      />
+                      <span className="text-text-secondary text-sm truncate">{tc.title}</span>
+                    </label>
+                  ))
+                )}
+              </div>
             </div>
           </div>
           <div className="flex justify-end gap-2 mt-6"><Button type="button" variant="secondary" onClick={() => { setIsModalOpen(false); setEditingTestCase(null); }}>Cancel</Button><Button type="submit" loading={submitting}>Save</Button></div>
