@@ -30,12 +30,13 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
           orderBy: { order: 'asc' },
           include: {
             templateStep: true,
+            testCase: true,
             evidence: true,
           },
         },
       },
       take: 50,
-    });
+    } as any);
 
     return NextResponse.json({ runningSession, history });
   } catch (error) {
@@ -58,7 +59,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const body = await request.json().catch(() => ({}));
-    const { title } = body;
+    const { title, testCaseIds } = body;
 
     const created = await prisma.$transaction(async (tx) => {
       const existing = await tx.testSession.findFirst({
@@ -68,13 +69,36 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       if (existing) return { existing };
 
-      const templateSteps = await tx.templateStep.findMany({
-        where: { projectId },
-        orderBy: { order: 'asc' },
-      });
+      let stepResultsData: any[] = [];
 
-      if (templateSteps.length === 0) {
-        return { error: 'Create at least one template step before starting a test' };
+      if (testCaseIds && testCaseIds.length > 0) {
+        // Use test cases as steps
+        const testCases = await tx.testCase.findMany({
+          where: { id: { in: testCaseIds } },
+        });
+        stepResultsData = testCases.map((tc, idx) => ({
+          testCaseId: tc.id,
+          userId: session.user.id,
+          status: StepResultStatus.pending,
+          order: idx,
+        }));
+      } else {
+        // Use template steps (original behavior)
+        const templateSteps = await tx.templateStep.findMany({
+          where: { projectId },
+          orderBy: { order: 'asc' },
+        });
+
+        if (templateSteps.length === 0) {
+          return { error: 'Create at least one template step before starting a test' };
+        }
+
+        stepResultsData = templateSteps.map((step) => ({
+          templateStepId: step.id,
+          userId: session.user.id,
+          status: StepResultStatus.pending,
+          order: step.order,
+        }));
       }
 
       const newSession = await tx.testSession.create({
@@ -83,22 +107,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           testerId: session.user.id,
           title,
           stepResults: {
-            create: templateSteps.map((step) => ({
-              templateStepId: step.id,
-              userId: session.user.id,
-              status: StepResultStatus.pending,
-              order: step.order,
-            })),
+            create: stepResultsData,
           },
         },
         include: {
           tester: { select: { id: true, name: true, email: true, image: true } },
           stepResults: {
             orderBy: { order: 'asc' },
-            include: { templateStep: true, evidence: true },
+            include: {
+              templateStep: true,
+              testCase: true,
+              evidence: true,
+            },
           },
         },
-      });
+      } as any);
 
       return { newSession };
     });

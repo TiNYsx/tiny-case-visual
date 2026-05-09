@@ -55,11 +55,12 @@ export async function getRunningSession(projectId: string) {
         orderBy: { order: 'asc' },
         include: {
           templateStep: true,
+          testCase: true,
           evidence: true,
         },
       },
     },
-  });
+  } as any);
 }
 
 export async function projectHasRunningSession(projectId: string) {

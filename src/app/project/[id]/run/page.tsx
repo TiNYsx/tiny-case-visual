@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ArrowLeft, CheckCircle, XCircle, Clock, Upload, Square, Play, Trash2, Lock } from 'lucide-react';
@@ -15,6 +15,32 @@ interface TemplateStep {
   instruction: string;
   expected: string | null;
   order: number;
+}
+
+interface TestCaseConnection {
+  id: string;
+  sourceId: string;
+  targetId: string;
+}
+
+interface TestCaseStep {
+  id: string;
+  text: string;
+  imageUrl: string | null;
+}
+
+interface TestCase {
+  id: string;
+  title: string;
+  description: string | null;
+  testCaseType: string | null;
+  testData: string | null;
+  expectedResult: string | null;
+  steps: TestCaseStep[];
+  connectionsAsSource: TestCaseConnection[];
+  connectionsAsTarget: TestCaseConnection[];
+  checkedAt: string | null;
+  status: string | null;
 }
 
 interface Evidence {
@@ -32,7 +58,8 @@ interface StepResult {
   actualResult: string | null;
   changedDetails: string | null;
   order: number;
-  templateStep: TemplateStep;
+  templateStep?: TemplateStep;
+  testCase?: TestCase;
   evidence: Evidence[];
 }
 
@@ -62,9 +89,12 @@ export default function RunTestPage() {
   const { data: session, status } = useSession();
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const projectId = params.id as string;
+  const startWithTestCaseId = searchParams.get('startWith');
 
   const [project, setProject] = useState<Project | null>(null);
+  const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [runningSession, setRunningSession] = useState<TestSession | null>(null);
   const [history, setHistory] = useState<TestSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,17 +111,25 @@ export default function RunTestPage() {
   const fetchData = useCallback(async () => {
     if (!projectId) return;
     try {
-      const [projectRes, sessionsRes] = await Promise.all([
+      const requests = [
         fetch(`/api/projects/${projectId}`),
         fetch(`/api/projects/${projectId}/sessions`),
-      ]);
+      ];
+      if (startWithTestCaseId) {
+        requests.push(fetch(`/api/testcases?projectId=${projectId}`));
+      }
 
-      if (projectRes.ok) setProject(await projectRes.json());
-      if (sessionsRes.ok) {
-        const data = await sessionsRes.json();
+      const results = await Promise.all(requests);
+
+      if (results[0].ok) setProject(await results[0].json());
+      if (results[1].ok) {
+        const data = await results[1].json();
         setRunningSession(data.runningSession);
         setHistory(data.history || []);
         setSessionNotes(data.runningSession?.notes || '');
+      }
+      if (startWithTestCaseId && results[2]?.ok) {
+        setTestCases(await results[2].json());
       }
     } catch (err) {
       console.error('Error fetching run data:', err);
@@ -99,7 +137,7 @@ export default function RunTestPage() {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, startWithTestCaseId]);
 
   useEffect(() => {
     fetchData();
@@ -118,14 +156,45 @@ export default function RunTestPage() {
   const activeTesterIsMe = runningSession?.testerId === session?.user?.id;
   const selectedResult = runningSession?.stepResults[selectedStepIndex] || null;
 
+  const buildTestSequence = (startId: string): TestCase[] => {
+    const visited = new Set<string>();
+    const sequence: TestCase[] = [];
+    const queue = [startId];
+
+    while (queue.length > 0) {
+      const currentId = queue.shift()!;
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
+
+      const tc = testCases.find(t => t.id === currentId);
+      if (tc) {
+        sequence.push(tc);
+        // Add connected test cases (following outgoing connections)
+        tc.connectionsAsSource.forEach(conn => {
+          if (!visited.has(conn.targetId)) {
+            queue.push(conn.targetId);
+          }
+        });
+      }
+    }
+    return sequence;
+  };
+
   const startSession = async () => {
     setStarting(true);
     setError(null);
     try {
+      const body: { title: string; testCaseIds?: string[] } = { title: `${project?.name || 'Project'} test` };
+
+      if (startWithTestCaseId && testCases.length > 0) {
+        const sequence = buildTestSequence(startWithTestCaseId);
+        body.testCaseIds = sequence.map(tc => tc.id);
+      }
+
       const res = await fetch(`/api/projects/${projectId}/sessions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: `${project?.name || 'Project'} test` }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -270,9 +339,30 @@ export default function RunTestPage() {
                     <div className="flex items-start gap-3">
                       <span className="w-8 h-8 rounded-full bg-accent/20 text-accent flex items-center justify-center shrink-0">{selectedStepIndex + 1}</span>
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold">{selectedResult.templateStep.title}</h3>
-                        <div className="prose prose-invert prose-sm max-w-none mt-2 text-text-secondary"><ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedResult.templateStep.instruction}</ReactMarkdown></div>
-                        {selectedResult.templateStep.expected && <div className="mt-3 text-sm text-text-muted"><span className="font-medium">Expected:</span> {selectedResult.templateStep.expected}</div>}
+                        {selectedResult.testCase ? (
+                          <>
+                            <h3 className="font-semibold">{selectedResult.testCase.title}</h3>
+                            {selectedResult.testCase.description && <div className="prose prose-invert prose-sm max-w-none mt-2 text-text-secondary"><ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedResult.testCase.description}</ReactMarkdown></div>}
+                            {selectedResult.testCase.testData && <div className="mt-3 text-sm"><span className="font-medium text-text-muted">Test Data:</span> <span className="text-text-secondary">{selectedResult.testCase.testData}</span></div>}
+                            {selectedResult.testCase.expectedResult && <div className="mt-2 text-sm"><span className="font-medium text-text-muted">Expected Result:</span> <span className="text-text-secondary">{selectedResult.testCase.expectedResult}</span></div>}
+                            {selectedResult.testCase.steps && selectedResult.testCase.steps.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                <span className="text-sm font-medium text-text-muted">Steps:</span>
+                                {selectedResult.testCase.steps.map((step, i) => (
+                                  <div key={step.id} className="glass rounded-lg p-2 text-sm text-text-secondary">
+                                    <span className="font-medium">{i + 1}.</span> {step.text}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <h3 className="font-semibold">{selectedResult.templateStep?.title}</h3>
+                            <div className="prose prose-invert prose-sm max-w-none mt-2 text-text-secondary"><ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedResult.templateStep?.instruction}</ReactMarkdown></div>
+                            {selectedResult.templateStep?.expected && <div className="mt-3 text-sm text-text-muted"><span className="font-medium">Expected:</span> {selectedResult.templateStep?.expected}</div>}
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -307,7 +397,7 @@ export default function RunTestPage() {
             {runningSession && (
               <div className="glass rounded-2xl p-4">
                 <h3 className="font-semibold mb-3">Session steps</h3>
-                <div className="space-y-2">{runningSession.stepResults.map((result, index) => <button key={result.id} onClick={() => setSelectedStepIndex(index)} className={`w-full flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${selectedStepIndex === index ? 'bg-accent/20 text-accent' : 'bg-bg-primary/50 text-text-secondary'}`}><StepIcon status={result.status} /><span className="truncate">{result.templateStep.title}</span></button>)}</div>
+                <div className="space-y-2">{runningSession.stepResults.map((result, index) => <button key={result.id} onClick={() => setSelectedStepIndex(index)} className={`w-full flex items-center gap-3 rounded-xl px-3 py-2 text-left text-sm transition-colors ${selectedStepIndex === index ? 'bg-accent/20 text-accent' : 'bg-bg-primary/50 text-text-secondary'}`}><StepIcon status={result.status} /><span className="truncate">{result.testCase?.title || result.templateStep?.title}</span></button>)}</div>
                 <div className="mt-4"><FieldEditor label="Session notes" value={sessionNotes} disabled={!activeTesterIsMe} onChange={setSessionNotes} rows={4} /></div>
               </div>
             )}

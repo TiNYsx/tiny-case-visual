@@ -212,10 +212,19 @@ export default function ProjectPage() {
         ...tc,
         onStartConnect: (nodeId: string) => setConnectingFrom(nodeId),
         onAddNode: handleAddNodeForNode,
+        onRun: (nodeId: string) => router.push(`/project/${projectId}/run?startWith=${nodeId}`),
+        onView: (nodeId: string) => {
+          const tc = testCases.find(t => t.id === nodeId);
+          if (tc) {
+            setSelectedTestCase(tc);
+            setActiveTab('details');
+          }
+        },
+        selectable: true,
       },
       type: 'custom',
     }));
-  }, [handleAddNodeForNode, testCases]);
+  }, [handleAddNodeForNode, testCases, projectId, router]);
 
   useEffect(() => {
     setFlowNodes(nodes);
@@ -226,9 +235,13 @@ export default function ProjectPage() {
       id: conn.id,
       source: conn.sourceId,
       target: conn.targetId,
-      type: 'smoothstep',
-      animated: true,
-      style: { stroke: 'rgba(99, 102, 241, 0.65)', strokeWidth: 2 },
+      type: 'default',
+      animated: false,
+      style: { stroke: '#6366f1', strokeWidth: 4 },
+      markerEnd: 'arrowclosed' as any,
+      selectable: true,
+      zIndex: 1,
+      interactionWidth: 20,
     })));
   }, [testCases]);
 
@@ -321,9 +334,6 @@ export default function ProjectPage() {
     if (connectingFrom) {
       handleConnect(connectingFrom, node.id);
       setConnectingFrom(null);
-    } else {
-      setSelectedTestCase(node.data);
-      setActiveTab('details');
     }
   };
 
@@ -352,7 +362,7 @@ export default function ProjectPage() {
         <div className="flex items-center gap-2 shrink-0">
           {isLocked && <div className="hidden md:flex items-center gap-2 text-xs text-yellow-300 glass rounded-xl px-3 py-2"><Lock className="w-4 h-4" /> Testing by {runningSession?.tester?.name || runningSession?.tester?.email}</div>}
           {connectingFrom && <Button variant="danger" size="sm" onClick={() => setConnectingFrom(null)}><X className="w-4 h-4 mr-1" />Cancel</Button>}
-          <Button variant="secondary" size="sm" onClick={() => router.push(`/project/${projectId}/run`)}><Play className="w-4 h-4 mr-2" />Run</Button>
+          <Button variant="secondary" size="sm" onClick={() => router.push(`/project/${projectId}/run${selectedTestCase ? `?startWith=${selectedTestCase.id}` : ''}`)} disabled={!selectedTestCase}><Play className="w-4 h-4 mr-2" />Run</Button>
           <Button variant="secondary" size="sm" onClick={() => setActiveTab('template')}><ListChecks className="w-4 h-4 mr-2" />Template</Button>
           <Button size="sm" onClick={handleAddNode} disabled={isLocked}><Plus className="w-4 h-4 mr-2" />Test Case</Button>
         </div>

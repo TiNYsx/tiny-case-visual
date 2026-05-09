@@ -1,7 +1,7 @@
 'use client';
 
 import { Handle, Position, NodeProps } from 'reactflow';
-import { MessageSquare, Plus, Link2 } from 'lucide-react';
+import { MessageSquare, Plus, Link2, Play, Eye } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 
@@ -27,6 +27,8 @@ interface CustomNodeData {
   _count?: { comments: number };
   onStartConnect?: (nodeId: string, x: number, y: number) => void;
   onAddNode?: (nodeId: string, position: 'left' | 'right') => void;
+  onRun?: (nodeId: string) => void;
+  onView?: (nodeId: string) => void;
 }
 
 const statusColors = {
@@ -76,18 +78,14 @@ export function CustomNode({ data, selected }: NodeProps<CustomNodeData>) {
   };
 
   return (
-    <motion.div
-      className={`relative w-[240px] glass rounded-2xl p-4 ${selected ? 'ring-2 ring-accent ring-opacity-50' : ''} ${colors.border} border transition-all duration-300 cursor-pointer`}
+    <div
+      className={`relative w-[240px] glass rounded-2xl p-4 ${selected ? 'ring-2 ring-accent ring-opacity-50' : ''} ${colors.border} border transition-all duration-300`}
       style={{
-        boxShadow: selected ? `0 0 20px rgba(99, 102, 241, 0.4)` : '0 4px 20px rgba(0, 0, 0, 0.3)'
+        boxShadow: selected ? `0 0 20px rgba(99, 102, 241, 0.4)` : '0 4px 20px rgba(0, 0, 0, 0.3)',
+        touchAction: 'none'
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      whileHover={{ scale: 1.02, y: -2 }}
-      whileTap={{ scale: 0.98 }}
-      initial={{ opacity: 0, scale: 0.8 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.3 }}
     >
       <Handle 
         type="target" 
@@ -124,14 +122,14 @@ export function CustomNode({ data, selected }: NodeProps<CustomNodeData>) {
       </div>
       
       <div className="flex items-center gap-4 text-xs text-text-muted flex-wrap">
-        <motion.span 
+        <motion.span
           className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-full"
           whileHover={{ scale: 1.05 }}
         >
           <span>{stepCount}</span> steps
         </motion.span>
         {connectionCount > 0 && (
-          <motion.span 
+          <motion.span
             className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-full"
             whileHover={{ scale: 1.05 }}
           >
@@ -140,7 +138,7 @@ export function CustomNode({ data, selected }: NodeProps<CustomNodeData>) {
           </motion.span>
         )}
         {data._count && data._count.comments > 0 && (
-          <motion.span 
+          <motion.span
             className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-full"
             whileHover={{ scale: 1.05 }}
           >
@@ -150,8 +148,30 @@ export function CustomNode({ data, selected }: NodeProps<CustomNodeData>) {
         )}
       </div>
 
+      {/* Action buttons - always visible */}
+      <div className="flex justify-center gap-2 mt-2">
+        {data.onRun && (
+          <button
+            onClick={(e) => { e.stopPropagation(); data.onRun!(data.id); }}
+            className="nodrag flex items-center gap-1.5 px-3 py-1 rounded-lg bg-green-500/20 text-green-300 text-xs font-medium hover:bg-green-500/30 transition-colors"
+          >
+            <Play className="w-3 h-3" />
+            Run
+          </button>
+        )}
+        {data.onView && (
+          <button
+            onClick={(e) => { e.stopPropagation(); data.onView!(data.id); }}
+            className="nodrag flex items-center gap-1.5 px-3 py-1 rounded-lg bg-accent/20 text-accent text-xs font-medium hover:bg-accent/30 transition-colors"
+          >
+            <Eye className="w-3 h-3" />
+            View
+          </button>
+        )}
+      </div>
+
       {/* Animated plus buttons */}
-      <motion.div 
+      <motion.div
         className="absolute top-1/2 -translate-y-1/2 -left-4"
         initial={{ scale: 0 }}
         animate={{ scale: hovered ? 1 : 0 }}
@@ -166,7 +186,7 @@ export function CustomNode({ data, selected }: NodeProps<CustomNodeData>) {
           <Plus className="w-4 h-4" />
         </motion.button>
       </motion.div>
-      <motion.div 
+      <motion.div
         className="absolute top-1/2 -translate-y-1/2 -right-4"
         initial={{ scale: 0 }}
         animate={{ scale: hovered ? 1 : 0 }}
@@ -186,8 +206,8 @@ export function CustomNode({ data, selected }: NodeProps<CustomNodeData>) {
         type="source" 
         position={Position.Right} 
         className="!bg-accent !w-4 !h-4 !rounded-full !border-2 !border-white/20 hover:!scale-125 transition-transform" 
-        onClick={handleConnectStart} 
+        onClick={handleConnectStart}
       />
-    </motion.div>
+    </div>
   );
 }
