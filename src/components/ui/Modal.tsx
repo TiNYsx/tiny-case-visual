@@ -35,10 +35,16 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md' }:
     lg: 'max-w-2xl',
   };
 
+  const maxHeights = {
+    sm: 'max-h-[60vh]',
+    md: 'max-h-[70vh]',
+    lg: 'max-h-[85vh]',
+  };
+
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -50,18 +56,18 @@ export function Modal({ isOpen, onClose, title, children, footer, size = 'md' }:
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className={`relative z-[101] w-full ${sizes[size]} mx-4 glass rounded-2xl p-6`}
+            className={`relative z-[101] w-full ${sizes[size]} ${maxHeights[size]} mx-4 glass rounded-2xl flex flex-col`}
           >
             {title && (
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex-shrink-0 flex items-center justify-between p-6 pb-0">
                 <h2 className="text-xl font-semibold">{title}</h2>
                 <Button variant="ghost" size="sm" onClick={onClose}>
                   <X className="w-5 h-5" />
                 </Button>
               </div>
             )}
-            <div className="mb-6">{children}</div>
-            {footer && <div className="flex justify-end gap-3">{footer}</div>}
+            <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
+            {footer && <div className="flex-shrink-0 flex justify-end gap-3 px-6 pb-6">{footer}</div>}
           </motion.div>
         </div>
       )}
