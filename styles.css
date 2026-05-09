@@ -1,0 +1,5 @@
+/* Add this to your CSS file */
+.popup {
+  max-height: 100vh;
+  overflow-y: auto;
+}
